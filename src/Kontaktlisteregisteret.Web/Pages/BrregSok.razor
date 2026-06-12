@@ -1,0 +1,130 @@
+@page "/brreg"
+@inject BrregService Brreg
+
+<PageTitle>Brreg-søk — Kontaktlisteregisteret</PageTitle>
+
+<div class="page-header">
+    <h1>Brreg-søk</h1>
+</div>
+
+<div class="search-bar">
+    <input class="form-input" @bind="query" @bind:event="oninput"
+        @onkeydown="OnKey" placeholder="Søk på navn eller organisasjonsnummer..." />
+    <button class="btn btn-primary" @onclick="SearchAsync" disabled="@loading">
+        @(loading ? "Søker..." : "Søk")
+    </button>
+</div>
+
+@if (results.Any())
+{
+    <div class="muted" style="margin-bottom:8px">@results.Count treff</div>
+    <div class="card">
+        @foreach (var e in results)
+        {
+            <div class="card-row @(expanded == e.organisasjonsnummer ? "expanded" : "")"
+                @onclick="() => ToggleExpand(e.organisasjonsnummer)">
+                <div class="grow">
+                    <div class="row-name">@e.navn</div>
+                    <div class="row-sub">
+                        @e.organisasjonsnummer
+                        @if (e.organisasjonsform is not null) { <text> · @e.organisasjonsform.kode</text> }
+                        @if (e.naeringskode1 is not null) { <text> · @e.naeringskode1.kode @e.naeringskode1.beskrivelse</text> }
+                        @if (!string.IsNullOrEmpty(e.postadresse?.poststed)) { <text> · @e.postadresse!.poststed</text> }
+                    </div>
+                </div>
+                @if (e.slettedato is not null)
+                {
+                    <span class="tag tag-error">Slettet</span>
+                }
+                <span class="expand-icon">@(expanded == e.organisasjonsnummer ? "▲" : "▼")</span>
+            </div>
+            @if (expanded == e.organisasjonsnummer)
+            {
+                <div class="expand-body">
+                    <div class="detail-grid">
+                        <div><span class="detail-label">Orgnr</span><span>@e.organisasjonsnummer</span></div>
+                        <div><span class="detail-label">Organisasjonsform</span><span>@e.organisasjonsform?.kode – @e.organisasjonsform?.beskrivelse</span></div>
+                        <div><span class="detail-label">Næringskode</span><span>@e.naeringskode1?.kode @e.naeringskode1?.beskrivelse</span></div>
+                        <div><span class="detail-label">Ansatte</span><span>@(e.antallAnsatte?.ToString() ?? "–")</span></div>
+                        @if (e.postadresse is not null)
+                        {
+                            <div><span class="detail-label">Postadresse</span><span>@e.DisplayAddress</span></div>
+                        }
+                        @if (e.overordnetEnhet is not null)
+                        {
+                            <div><span class="detail-label">Overordnet enhet</span><span>@e.overordnetEnhet.navn (@e.overordnetEnhet.organisasjonsnummer)</span></div>
+                        }
+                    </div>
+                    @if (children.ContainsKey(e.organisasjonsnummer))
+                    {
+                        <div style="margin-top:10px">
+                            <div class="section-label">Underliggende enheter (@children[e.organisasjonsnummer].Count)</div>
+                            @if (children[e.organisasjonsnummer].Any())
+                            {
+                                <div class="card" style="margin-top:6px">
+                                    @foreach (var c in children[e.organisasjonsnummer])
+                                    {
+                                        <div class="card-row small">
+                                            <div class="grow">
+                                                <div class="row-name">@c.navn</div>
+                                                <div class="row-sub">@c.organisasjonsnummer · @c.organisasjonsform?.kode</div>
+                                            </div>
+                                        </div>
+                                    }
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="muted">Ingen underliggende enheter funnet.</div>
+                            }
+                        </div>
+                    }
+                    else
+                    {
+                        <button class="btn btn-sm" style="margin-top:8px"
+                            @onclick="() => LoadChildrenAsync(e.organisasjonsnummer)">
+                            Vis underliggende enheter
+                        </button>
+                    }
+                </div>
+            }
+        }
+    </div>
+}
+else if (searched && !loading)
+{
+    <div class="empty-state">Ingen treff på «@query».</div>
+}
+
+@code {
+    string query = "";
+    bool loading, searched;
+    List<BrregEnhet> results = [];
+    string? expanded;
+    Dictionary<string, List<BrregEnhet>> children = [];
+
+    async Task SearchAsync()
+    {
+        if (string.IsNullOrWhiteSpace(query)) return;
+        loading = true;
+        searched = false;
+        results = await Brreg.SearchAsync(query);
+        loading = false;
+        searched = true;
+        expanded = null;
+    }
+
+    async Task OnKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await SearchAsync();
+    }
+
+    void ToggleExpand(string orgnr) =>
+        expanded = expanded == orgnr ? null : orgnr;
+
+    async Task LoadChildrenAsync(string orgnr)
+    {
+        var ch = await Brreg.GetChildrenAsync(orgnr);
+        children[orgnr] = ch;
+    }
+}

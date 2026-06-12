@@ -1,0 +1,12 @@
+{
+  "name": "Kontaktlisteregisteret",
+  "image": "mcr.microsoft.com/devcontainers/dotnet:8.0",
+  "forwardPorts": [5000],
+  "postCreateCommand": "cd src/Kontaktlisteregisteret.Web && dotnet restore",
+  "postStartCommand": "cd src/Kontaktlisteregisteret.Web && dotnet run --urls http://0.0.0.0:5000",
+  "customizations": {
+    "vscode": {
+      "extensions": ["ms-dotnettools.csdevkit", "ms-dotnettools.csharp"]
+    }
+  }
+}

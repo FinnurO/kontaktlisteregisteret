@@ -1,0 +1,65 @@
+@page "/"
+@inject TargetGroupService Svc
+@inject NavigationManager Nav
+
+<PageTitle>Oversikt — Kontaktlisteregisteret</PageTitle>
+
+<div class="page-header">
+    <h1>Oversikt</h1>
+</div>
+
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-label">Målgrupper</div>
+        <div class="stat-value">@groups.Count</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-label">Dynamiske</div>
+        <div class="stat-value">@groups.Count(g => g.Type == TargetGroupType.Dynamic)</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-label">Statiske</div>
+        <div class="stat-value">@groups.Count(g => g.Type == TargetGroupType.Static)</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-label">Mottakere totalt</div>
+        <div class="stat-value">@groups.Sum(g => g.Members.Count)</div>
+    </div>
+</div>
+
+<div class="section-header">
+    <span class="section-title">Siste målgrupper</span>
+    <a href="malgrupper/ny" class="btn btn-primary">+ Ny målgruppe</a>
+</div>
+
+@if (!groups.Any())
+{
+    <div class="empty-state">
+        <p>Ingen målgrupper ennå.</p>
+        <a href="malgrupper/ny" class="btn btn-primary">Opprett din første målgruppe</a>
+    </div>
+}
+else
+{
+    <div class="card">
+        @foreach (var g in groups.Take(5))
+        {
+            <div class="card-row" @onclick="() => Nav.NavigateTo($"malgrupper/{g.Id}")">
+                <div class="grow">
+                    <div class="row-name">@g.Name</div>
+                    <div class="row-sub">@g.Type · @g.Members.Count mottakere · @g.CreatedAt.ToString("dd. MMM yyyy")</div>
+                </div>
+                <span class="tag @(g.Type == TargetGroupType.Dynamic ? "tag-dynamic" : "tag-static")">
+                    @(g.Type == TargetGroupType.Dynamic ? "Dynamisk" : "Statisk")
+                </span>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    List<TargetGroup> groups = [];
+
+    protected override async Task OnInitializedAsync() =>
+        groups = await Svc.GetAllAsync();
+}

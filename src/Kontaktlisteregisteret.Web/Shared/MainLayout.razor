@@ -1,0 +1,27 @@
+@inherits LayoutComponentBase
+
+<div class="app-shell">
+    <nav class="sidebar">
+        <div class="sidebar-header">
+            <span class="sidebar-logo">Kontaktlisteregisteret</span>
+            <span class="sidebar-env">PoC · Ingen pålogging</span>
+        </div>
+        <div class="nav-section">Hoved</div>
+        <NavLink class="nav-item" href="" Match="NavLinkMatch.All">
+            <span class="nav-icon">⊞</span> Oversikt
+        </NavLink>
+        <NavLink class="nav-item" href="malgrupper">
+            <span class="nav-icon">☰</span> Målgrupper
+        </NavLink>
+        <NavLink class="nav-item" href="brreg">
+            <span class="nav-icon">⊕</span> Brreg-søk
+        </NavLink>
+        <div class="nav-section">API</div>
+        <NavLink class="nav-item" href="api-docs">
+            <span class="nav-icon">{ }</span> API-dokumentasjon
+        </NavLink>
+    </nav>
+    <div class="main-area">
+        @Body
+    </div>
+</div>

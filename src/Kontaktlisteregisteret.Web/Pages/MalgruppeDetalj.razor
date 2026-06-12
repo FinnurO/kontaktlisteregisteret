@@ -1,0 +1,136 @@
+@page "/malgrupper/{Id:int}"
+@inject TargetGroupService Svc
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+
+<PageTitle>@(group?.Name ?? "Målgruppe") — Kontaktlisteregisteret</PageTitle>
+
+@if (group is null)
+{
+    <div class="loading">Laster...</div>
+}
+else
+{
+    <div class="page-header">
+        <a href="malgrupper" class="btn btn-sm">← Tilbake</a>
+        <h1>@group.Name</h1>
+        <div style="display:flex;gap:8px">
+            <button class="btn" @onclick="ExportJsonAsync">↓ JSON</button>
+            <button class="btn" @onclick="ExportCsvAsync">↓ CSV</button>
+        </div>
+    </div>
+
+    <div class="detail-meta">
+        <span class="tag @(group.Type == TargetGroupType.Dynamic ? "tag-dynamic" : "tag-static")">
+            @(group.Type == TargetGroupType.Dynamic ? "Dynamisk" : "Statisk")
+        </span>
+        <span class="muted">@group.Members.Count mottakere</span>
+        <span class="muted">Opprettet @group.CreatedAt.ToString("dd. MMMM yyyy")</span>
+    </div>
+
+    @if (group.Type == TargetGroupType.Dynamic && criteria is not null)
+    {
+        <div class="detail-section">
+            <div class="section-label">Filterregler</div>
+            <div class="chips">
+                @if (!string.IsNullOrEmpty(criteria.OrgForm))
+                {
+                    <span class="chip">Organisasjonsform = @criteria.OrgForm</span>
+                }
+                @if (!string.IsNullOrEmpty(criteria.NacePrefix))
+                {
+                    <span class="chip">Næringskode starter med @criteria.NacePrefix</span>
+                }
+            </div>
+            <button class="btn btn-sm" style="margin-top:8px" @onclick="SyncAsync" disabled="@syncing">
+                @(syncing ? "Synkroniserer..." : "↻ Synkroniser mot Brreg")
+            </button>
+        </div>
+    }
+
+    <div class="detail-section">
+        <div class="section-label">Mottakere</div>
+        <div style="margin-bottom:8px">
+            <input class="form-input" style="max-width:280px" @bind="filter" @bind:event="oninput"
+                placeholder="Filtrer på navn eller orgnr..." />
+        </div>
+        @if (!group.Members.Any())
+        {
+            <div class="empty-state">Ingen mottakere ennå.</div>
+        }
+        else
+        {
+            <div class="card">
+                @foreach (var m in Filtered)
+                {
+                    <div class="card-row small">
+                        <div class="grow">
+                            <div class="row-name">@m.Recipient.Name</div>
+                            <div class="row-sub">
+                                @m.Recipient.ExternalId
+                                @if (!string.IsNullOrEmpty(m.Recipient.OrgForm)) { <text> · @m.Recipient.OrgForm</text> }
+                                @if (!string.IsNullOrEmpty(m.Recipient.PostalCity)) { <text> · @m.Recipient.PostalCity</text> }
+                            </div>
+                        </div>
+                        @if (!m.Recipient.IsActive)
+                        {
+                            <span class="tag tag-error">Inaktiv</span>
+                        }
+                    </div>
+                }
+            </div>
+            @if (Filtered.Count < group.Members.Count)
+            {
+                <div class="muted" style="margin-top:4px">Viser @Filtered.Count av @group.Members.Count</div>
+            }
+        }
+    </div>
+
+    <div class="detail-section">
+        <div class="section-label">API-endepunkt</div>
+        <code class="code-block">GET /api/v1/malgrupper/@group.Id/mottakere</code>
+        <div class="muted" style="margin-top:4px">Krever Maskinporten-token med scope <code>digdir:kontaktliste.read</code> (ikke aktivert i PoC)</div>
+    </div>
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+    TargetGroup? group;
+    DynamicCriteria? criteria;
+    bool syncing;
+    string filter = "";
+
+    List<TargetGroupMember> Filtered =>
+        string.IsNullOrWhiteSpace(filter) ? group!.Members :
+        group!.Members.Where(m =>
+            m.Recipient.Name.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
+            m.Recipient.ExternalId.Contains(filter)).ToList();
+
+    protected override async Task OnInitializedAsync()
+    {
+        group = await Svc.GetAsync(Id);
+        if (group is not null) criteria = Svc.GetCriteria(group);
+    }
+
+    async Task SyncAsync()
+    {
+        syncing = true;
+        await Svc.SyncDynamicGroupAsync(group!);
+        group = await Svc.GetAsync(Id);
+        syncing = false;
+    }
+
+    async Task ExportJsonAsync()
+    {
+        var bytes = await Svc.ExportJsonAsync(Id);
+        var b64 = Convert.ToBase64String(bytes);
+        await JS.InvokeVoidAsync("downloadFile", $"{group!.Name}.json", "application/json", b64);
+    }
+
+    async Task ExportCsvAsync()
+    {
+        var bytes = await Svc.ExportCsvAsync(Id);
+        var b64 = Convert.ToBase64String(bytes);
+        await JS.InvokeVoidAsync("downloadFile", $"{group!.Name}.csv", "text/csv", b64);
+    }
+}

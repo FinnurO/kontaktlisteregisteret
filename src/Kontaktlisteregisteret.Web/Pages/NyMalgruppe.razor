@@ -1,0 +1,339 @@
+@page "/malgrupper/ny"
+@inject TargetGroupService Svc
+@inject BrregService Brreg
+@inject NavigationManager Nav
+
+<PageTitle>Ny målgruppe — Kontaktlisteregisteret</PageTitle>
+
+<div class="page-header">
+    <a href="malgrupper" class="btn btn-sm">← Tilbake</a>
+    <h1>Ny målgruppe</h1>
+</div>
+
+<div class="wizard-card">
+    <div class="wizard-steps">
+        <div class="wstep @(step >= 1 ? (step > 1 ? "done" : "active") : "")">1. Grunnlag</div>
+        <div class="wstep @(step >= 2 ? (step > 2 ? "done" : "active") : "")">2. Innhold</div>
+        <div class="wstep @(step >= 3 ? "active" : "")">3. Forhåndsvis</div>
+    </div>
+
+    @if (step == 1)
+    {
+        <div class="wizard-body">
+            <div class="form-group">
+                <label class="form-label">Navn</label>
+                <input class="form-input" @bind="name" placeholder="Gi målgruppen et navn..." />
+            </div>
+            <div class="form-group">
+                <label class="form-label">Type</label>
+                <div class="type-grid">
+                    <div class="type-option @(type == "dynamic" ? "selected" : "")" @onclick='() => type = "dynamic"'>
+                        <div class="type-title">Dynamisk</div>
+                        <div class="type-desc">Regler mot Brreg — oppdateres automatisk</div>
+                    </div>
+                    <div class="type-option @(type == "static-orgnr" ? "selected" : "")" @onclick='() => type = "static-orgnr"'>
+                        <div class="type-title">Statisk — orgnr-liste</div>
+                        <div class="type-desc">Last opp CSV med organisasjonsnummer</div>
+                    </div>
+                    <div class="type-option @(type == "static-search" ? "selected" : "")" @onclick='() => type = "static-search"'>
+                        <div class="type-title">Statisk — søk og velg</div>
+                        <div class="type-desc">Søk i Brreg og velg enkeltvis</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+    else if (step == 2 && type == "dynamic")
+    {
+        <div class="wizard-body">
+            <h2 style="font-size:15px;margin-bottom:12px">Filterregler</h2>
+            <div class="form-row">
+                <div class="form-group" style="flex:1">
+                    <label class="form-label">Organisasjonsform</label>
+                    <select class="form-input" @bind="criteria.OrgForm">
+                        <option value="">Alle</option>
+                        <option value="KOMM">KOMM – Kommune</option>
+                        <option value="FKF">FKF – Fylkeskommune</option>
+                        <option value="STAT">STAT – Staten</option>
+                        <option value="AS">AS – Aksjeselskap</option>
+                        <option value="STI">STI – Stiftelse</option>
+                        <option value="FLI">FLI – Forening/lag/innretning</option>
+                        <option value="SA">SA – Samvirkeforetak</option>
+                        <option value="IKS">IKS – Interkommunalt selskap</option>
+                    </select>
+                </div>
+                <div class="form-group" style="flex:1">
+                    <label class="form-label">Næringskode (prefiks)</label>
+                    <input class="form-input" @bind="criteria.NacePrefix" placeholder="F.eks. 90 for kultur" />
+                </div>
+            </div>
+            @if (previewLoading)
+            {
+                <div class="loading">Henter fra Brreg...</div>
+            }
+            else if (previewResults.Any())
+            {
+                <div class="preview-count">~@previewResults.Count mottakere</div>
+                <div class="card" style="margin-top:8px">
+                    @foreach (var e in previewResults.Take(5))
+                    {
+                        <div class="card-row small">
+                            <div class="grow">
+                                <div class="row-name">@e.navn</div>
+                                <div class="row-sub">@e.organisasjonsnummer · @e.organisasjonsform?.kode</div>
+                            </div>
+                        </div>
+                    }
+                    @if (previewResults.Count > 5)
+                    {
+                        <div class="card-row small muted">+ @(previewResults.Count - 5) til</div>
+                    }
+                </div>
+            }
+            <button class="btn" style="margin-top:10px" @onclick="PreviewAsync">
+                Forhåndsvis resultater
+            </button>
+        </div>
+    }
+    else if (step == 2 && type == "static-orgnr")
+    {
+        <div class="wizard-body">
+            <div class="form-group">
+                <label class="form-label">Lim inn organisasjonsnummer (ett per linje)</label>
+                <textarea class="form-input" rows="8" @bind="orgnrInput"
+                    placeholder="991825827&#10;974760673&#10;958935420&#10;..."></textarea>
+            </div>
+            @if (validating)
+            {
+                <div class="loading">Validerer mot Brreg...</div>
+            }
+            else if (validationResults.Any())
+            {
+                <div class="validation-summary">
+                    <span class="tag tag-static">@validationResults.Count(r => r.Status == ValidationStatus.Ok) OK</span>
+                    @if (validationResults.Any(r => r.Status != ValidationStatus.Ok))
+                    {
+                        <span class="tag tag-error">@validationResults.Count(r => r.Status != ValidationStatus.Ok) feil</span>
+                    }
+                </div>
+                <div class="card" style="margin-top:8px">
+                    @foreach (var r in validationResults)
+                    {
+                        <div class="card-row small">
+                            <span class="status-dot @StatusClass(r.Status)"></span>
+                            <div class="grow">
+                                <div class="row-name">@(r.Enhet?.navn ?? r.Orgnr)</div>
+                                <div class="row-sub">@r.Orgnr · @StatusLabel(r.Status)</div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+            <button class="btn" style="margin-top:10px" @onclick="ValidateOrgnrAsync">
+                Valider mot Brreg
+            </button>
+        </div>
+    }
+    else if (step == 2 && type == "static-search")
+    {
+        <div class="wizard-body">
+            <div class="form-row">
+                <input class="form-input" style="flex:1" @bind="searchQuery" placeholder="Søk på navn eller orgnr..." />
+                <button class="btn" @onclick="SearchBrregAsync">Søk</button>
+            </div>
+            @if (searching)
+            {
+                <div class="loading" style="margin-top:8px">Søker i Brreg...</div>
+            }
+            else if (searchResults.Any())
+            {
+                <div class="card" style="margin-top:8px">
+                    @foreach (var e in searchResults)
+                    {
+                        <div class="card-row small">
+                            <div class="grow">
+                                <div class="row-name">@e.navn</div>
+                                <div class="row-sub">@e.organisasjonsnummer · @e.organisasjonsform?.kode · @e.postadresse?.poststed</div>
+                            </div>
+                            @if (selectedOrgnrs.Contains(e.organisasjonsnummer))
+                            {
+                                <button class="btn btn-sm tag-static" @onclick="() => selectedOrgnrs.Remove(e.organisasjonsnummer)">
+                                    ✓ Valgt
+                                </button>
+                            }
+                            else
+                            {
+                                <button class="btn btn-sm" @onclick="() => { selectedEnheter[e.organisasjonsnummer] = e; selectedOrgnrs.Add(e.organisasjonsnummer); }">
+                                    + Legg til
+                                </button>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+            @if (selectedOrgnrs.Any())
+            {
+                <div style="margin-top:12px">
+                    <div class="form-label">Valgte (@selectedOrgnrs.Count)</div>
+                    <div class="card">
+                        @foreach (var orgnr in selectedOrgnrs)
+                        {
+                            <div class="card-row small">
+                                <div class="grow">
+                                    <div class="row-name">@(selectedEnheter.GetValueOrDefault(orgnr)?.navn ?? orgnr)</div>
+                                    <div class="row-sub">@orgnr</div>
+                                </div>
+                                <button class="btn btn-sm btn-danger" @onclick="() => { selectedOrgnrs.Remove(orgnr); selectedEnheter.Remove(orgnr); }">✕</button>
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+    }
+    else if (step == 3)
+    {
+        <div class="wizard-body">
+            <div class="preview-summary">
+                <div class="stat-card"><div class="stat-label">Navn</div><div>@name</div></div>
+                <div class="stat-card"><div class="stat-label">Type</div><div>@TypeDisplayName</div></div>
+                <div class="stat-card"><div class="stat-label">Mottakere</div><div class="stat-value">@RecipientCount</div></div>
+            </div>
+            @if (error is not null)
+            {
+                <div class="alert-error">@error</div>
+            }
+        </div>
+    }
+
+    <div class="wizard-footer">
+        @if (step > 1)
+        {
+            <button class="btn" @onclick="() => step--">← Tilbake</button>
+        }
+        else
+        {
+            <span></span>
+        }
+        @if (step < 3)
+        {
+            <button class="btn btn-primary" @onclick="NextStepAsync" disabled="@(!CanProceed)">
+                Neste →
+            </button>
+        }
+        else
+        {
+            <button class="btn btn-primary" @onclick="CreateAsync" disabled="@saving">
+                @(saving ? "Oppretter..." : "Opprett målgruppe")
+            </button>
+        }
+    </div>
+</div>
+
+@code {
+    int step = 1;
+    string name = "";
+    string type = "dynamic";
+    DynamicCriteria criteria = new();
+    string orgnrInput = "";
+    string searchQuery = "";
+    string? error;
+    bool saving, previewLoading, validating, searching;
+    List<BrregEnhet> previewResults = [];
+    List<OrgnrValidationResult> validationResults = [];
+    List<BrregEnhet> searchResults = [];
+    HashSet<string> selectedOrgnrs = [];
+    Dictionary<string, BrregEnhet> selectedEnheter = [];
+
+    bool CanProceed => step == 1 ? !string.IsNullOrWhiteSpace(name) && !string.IsNullOrWhiteSpace(type) : true;
+
+    string TypeDisplayName => type switch
+    {
+        "dynamic" => "Dynamisk",
+        "static-orgnr" => "Statisk (orgnr-liste)",
+        "static-search" => "Statisk (søk og velg)",
+        _ => type
+    };
+
+    int RecipientCount => type switch
+    {
+        "dynamic" => previewResults.Count,
+        "static-orgnr" => validationResults.Count(r => r.Status == ValidationStatus.Ok),
+        "static-search" => selectedOrgnrs.Count,
+        _ => 0
+    };
+
+    async Task NextStepAsync()
+    {
+        if (step == 1) { step = 2; return; }
+        step = 3;
+    }
+
+    async Task PreviewAsync()
+    {
+        previewLoading = true;
+        previewResults = await Brreg.EvaluateDynamicCriteriaAsync(criteria);
+        previewLoading = false;
+    }
+
+    async Task ValidateOrgnrAsync()
+    {
+        validating = true;
+        var lines = orgnrInput.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        validationResults = await Brreg.ValidateOrgnrListAsync(lines);
+        validating = false;
+    }
+
+    async Task SearchBrregAsync()
+    {
+        searching = true;
+        searchResults = await Brreg.SearchAsync(searchQuery);
+        searching = false;
+    }
+
+    async Task CreateAsync()
+    {
+        if (string.IsNullOrWhiteSpace(name)) { error = "Navn er påkrevd."; return; }
+        saving = true;
+        error = null;
+        try
+        {
+            if (type == "dynamic")
+            {
+                await Svc.CreateDynamicAsync(name, TargetGroupScope.Private, criteria);
+            }
+            else
+            {
+                var recipients = type == "static-orgnr"
+                    ? validationResults.Where(r => r.Status == ValidationStatus.Ok && r.Enhet is not null)
+                        .Select(r => TargetGroupService.BrregEnhetToRecipient(r.Enhet!)).ToList()
+                    : selectedOrgnrs.Where(o => selectedEnheter.ContainsKey(o))
+                        .Select(o => TargetGroupService.BrregEnhetToRecipient(selectedEnheter[o])).ToList();
+                await Svc.CreateStaticAsync(name, TargetGroupScope.Private, recipients);
+            }
+            Nav.NavigateTo("/malgrupper");
+        }
+        catch (Exception ex)
+        {
+            error = $"Feil: {ex.Message}";
+            saving = false;
+        }
+    }
+
+    static string StatusClass(ValidationStatus s) => s switch
+    {
+        ValidationStatus.Ok => "ok",
+        ValidationStatus.NotFound => "error",
+        ValidationStatus.Deleted => "warn",
+        _ => "error"
+    };
+
+    static string StatusLabel(ValidationStatus s) => s switch
+    {
+        ValidationStatus.Ok => "Gyldig",
+        ValidationStatus.NotFound => "Ikke funnet i Brreg",
+        ValidationStatus.Deleted => "Slettet/opphørt",
+        ValidationStatus.InvalidFormat => "Ugyldig format",
+        _ => s.ToString()
+    };
+}
