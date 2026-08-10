@@ -200,9 +200,11 @@
             }
             else if (previewResults.Any())
             {
+                var previewTotalPages = (int)Math.Ceiling(previewResults.Count / (double)PreviewPageSize);
+                var previewSlice = previewResults.Skip(previewPage * PreviewPageSize).Take(PreviewPageSize);
                 <div class="preview-count">~@previewResults.Count mottakere</div>
                 <div class="card" style="margin-top:8px">
-                    @foreach (var e in previewResults.Take(10))
+                    @foreach (var e in previewSlice)
                     {
                         <div class="card-row small">
                             <div class="grow">
@@ -211,11 +213,19 @@
                             </div>
                         </div>
                     }
-                    @if (previewResults.Count > 10)
-                    {
-                        <div class="card-row small muted">+ @(previewResults.Count - 10) til</div>
-                    }
                 </div>
+                @if (previewTotalPages > 1)
+                {
+                    <div style="display:flex;gap:8px;align-items:center;margin-top:8px">
+                        <button class="btn btn-sm" @onclick="() => previewPage--" disabled="@(previewPage == 0)">
+                            ← Forrige
+                        </button>
+                        <span class="muted" style="font-size:13px">Side @(previewPage + 1) av @previewTotalPages</span>
+                        <button class="btn btn-sm" @onclick="() => previewPage++" disabled="@(previewPage >= previewTotalPages - 1)">
+                            Neste →
+                        </button>
+                    </div>
+                }
             }
             <button class="btn" style="margin-top:10px" @onclick="PreviewAsync" disabled="@previewLoading">
                 Forhåndsvis resultater
@@ -559,6 +569,8 @@
     int searchPage = 0;
     int searchTotalPages = 1;
     int searchTotalElements = 0;
+    int previewPage = 0;
+    const int PreviewPageSize = 200;
 
 
     void VelgDynamisk()     { type = "dynamic"; }
@@ -595,6 +607,7 @@
     {
         previewLoading = true;
         previewError = null;
+        previewPage = 0;
         previewResults = await Brreg.EvaluateDynamicCriteriaAsync(criteria);
         previewError = Brreg.LastError;
         previewLoading = false;
