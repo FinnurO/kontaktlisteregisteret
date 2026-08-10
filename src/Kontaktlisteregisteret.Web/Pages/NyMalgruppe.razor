@@ -230,9 +230,12 @@
     {
         <div class="wizard-body">
             <div class="form-group">
-                <label class="form-label">Lim inn organisasjonsnummer (ett per linje)</label>
+                <label class="form-label">Lim inn organisasjonsnummer — ett per linje eller semikolonseparert</label>
                 <textarea class="form-input" rows="8" @bind="orgnrInput"
-                    placeholder="991825827&#10;974760673&#10;958935420&#10;..."></textarea>
+                    placeholder="991825827
+974760673
+958935420
+..."></textarea>
             </div>
             @if (validating)
             {
@@ -450,7 +453,7 @@
     async Task ValidateOrgnrAsync()
     {
         validating = true;
-        var lines = orgnrInput.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var lines = orgnrInput.Split(['\n', '\r', ';', ','], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         validationResults = await Brreg.ValidateOrgnrListAsync(lines);
         validating = false;
     }
