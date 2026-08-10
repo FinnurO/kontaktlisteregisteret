@@ -271,19 +271,154 @@
     else if (step == 2 && type == "static-search")
     {
         <div class="wizard-body">
-            <div class="form-row">
-                <input class="form-input" style="flex:1" @bind="searchQuery"
-                    @onkeydown="@(async e => { if (e.Key == "Enter") await SearchBrregAsync(); })"
-                    placeholder="Søk på navn eller orgnr..." />
-                <button class="btn" @onclick="SearchBrregAsync" disabled="@searching">Søk</button>
+            <h2 style="font-size:15px;margin-bottom:16px;font-weight:600">Søk og filtrer</h2>
+
+            @* Fritekst *@
+            <div class="form-group">
+                <label class="form-label">Navn eller orgnr (valgfritt)</label>
+                <div class="form-row">
+                    <input class="form-input" style="flex:1" @bind="searchQuery"
+                        @onkeydown="@(async e => { if (e.Key == "Enter") await SearchBrregAsync(); })"
+                        placeholder="Søk på navn eller orgnr..." />
+                </div>
             </div>
+
+            @* Samme filterregler som dynamisk *@
+            <div class="form-row">
+                <div class="form-group" style="flex:1">
+                    <label class="form-label">Organisasjonsform</label>
+                    <select class="form-input" @bind="criteria.OrgForm">
+                        <option value="">Alle organisasjonsformer</option>
+                        <optgroup label="Offentlig sektor">
+                            <option value="KOMM">KOMM – Kommune</option>
+                            <option value="FYLK">FYLK – Fylkeskommune</option>
+                            <option value="STAT">STAT – Staten</option>
+                            <option value="KF">KF – Kommunalt foretak</option>
+                            <option value="FKF">FKF – Fylkeskommunalt foretak</option>
+                            <option value="IKS">IKS – Interkommunalt selskap</option>
+                            <option value="ORGL">ORGL – Organisasjonsledd</option>
+                        </optgroup>
+                        <optgroup label="Næringsliv">
+                            <option value="AS">AS – Aksjeselskap</option>
+                            <option value="ASA">ASA – Allmennaksjeselskap</option>
+                            <option value="ENK">ENK – Enkeltpersonforetak</option>
+                            <option value="ANS">ANS – Ansvarlig selskap</option>
+                            <option value="DA">DA – Delt ansvar</option>
+                            <option value="NUF">NUF – Norskregistrert utenlandsk foretak</option>
+                        </optgroup>
+                        <optgroup label="Organisasjoner">
+                            <option value="STI">STI – Stiftelse</option>
+                            <option value="FLI">FLI – Forening/lag/innretning</option>
+                            <option value="SA">SA – Samvirkeforetak</option>
+                            <option value="BA">BA – Boligbyggelag</option>
+                            <option value="BRL">BRL – Borettslag</option>
+                        </optgroup>
+                    </select>
+                </div>
+                <div class="form-group" style="flex:1">
+                    <label class="form-label">Næringskode (NACE)</label>
+                    <select class="form-input" @bind="naceSelection" @bind:after="OnNaceSelected">
+                        <option value="">Alle næringskoder</option>
+                        <optgroup label="Primærnæringer">
+                            <option value="01">01 – Jordbruk og jakt</option>
+                            <option value="02">02 – Skogbruk</option>
+                            <option value="03">03 – Fiske og akvakultur</option>
+                        </optgroup>
+                        <optgroup label="Industri og energi">
+                            <option value="10">10–12 – Næringsmidler, drikke, tobakk</option>
+                            <option value="19">19–25 – Kjemisk industri, metaller</option>
+                            <option value="35">35 – Elektrisitets- og gassforsyning</option>
+                            <option value="36">36–39 – Vann, avløp, renovasjon</option>
+                        </optgroup>
+                        <optgroup label="Bygg og handel">
+                            <option value="41">41–43 – Bygge- og anleggsvirksomhet</option>
+                            <option value="45">45–47 – Varehandel</option>
+                        </optgroup>
+                        <optgroup label="Transport og reiseliv">
+                            <option value="49">49–53 – Transport og lagring</option>
+                            <option value="55">55–56 – Overnatting og servering</option>
+                        </optgroup>
+                        <optgroup label="IKT og finans">
+                            <option value="58">58–63 – Informasjon og kommunikasjon</option>
+                            <option value="64">64–66 – Finans og forsikring</option>
+                        </optgroup>
+                        <optgroup label="Faglig og teknisk">
+                            <option value="68">68 – Eiendom</option>
+                            <option value="69">69–75 – Faglig og vitenskapelig tjenesteyting</option>
+                            <option value="77">77–82 – Forretningsmessig tjenesteyting</option>
+                        </optgroup>
+                        <optgroup label="Offentlig og ideell">
+                            <option value="84">84 – Offentlig administrasjon og forsvar</option>
+                            <option value="85">85 – Undervisning</option>
+                            <option value="86">86–88 – Helse- og sosialtjenester</option>
+                            <option value="90">90–93 – Kultur, underholdning og fritid</option>
+                            <option value="94">94–96 – Annen tjenesteyting / organisasjoner</option>
+                        </optgroup>
+                        <option value="__custom__">Skriv inn kode manuelt...</option>
+                    </select>
+                    @if (naceSelection == "__custom__")
+                    {
+                        <input class="form-input" style="margin-top:6px" @bind="criteria.NacePrefix" placeholder="F.eks. 86.101" />
+                    }
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group" style="flex:1">
+                    <label class="form-label">Virksomhetsstatus</label>
+                    <select class="form-input" @bind="criteria.Aktivitet">
+                        <option value="aktive">Kun aktive virksomheter</option>
+                        <option value="">Alle (inkl. slettede)</option>
+                        <option value="avvikling">Under avvikling</option>
+                        <option value="konkurs">Konkurs</option>
+                    </select>
+                </div>
+                <div class="form-group" style="flex:1">
+                    <label class="form-label">Institusjonell sektorkode</label>
+                    <select class="form-input" @bind="criteria.SektorKode">
+                        <option value="">Alle sektorer</option>
+                        <optgroup label="Offentlig forvaltning">
+                            <option value="1110">1110 – Statsforvaltningen</option>
+                            <option value="1120">1120 – Statsforetak</option>
+                            <option value="1510">1510 – Kommuneforetak</option>
+                            <option value="6100">6100 – Kommuneforvaltningen</option>
+                            <option value="6500">6500 – Fylkeskommuneforvaltningen</option>
+                        </optgroup>
+                        <optgroup label="Næringsliv">
+                            <option value="2100">2100 – Statsaksjeselskaper o.l.</option>
+                            <option value="2300">2300 – Andre offentlig eide foretak</option>
+                            <option value="3100">3100 – Private aksjeselskaper mv.</option>
+                            <option value="3200">3200 – Private personlige foretak mv.</option>
+                        </optgroup>
+                        <optgroup label="Ideell og annet">
+                            <option value="7000">7000 – Ideelle organisasjoner mv.</option>
+                            <option value="8200">8200 – Banker og finansforetak</option>
+                            <option value="9000">9000 – Utenlandske sektorer</option>
+                        </optgroup>
+                    </select>
+                </div>
+            </div>
+
+            <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center">
+                <button class="btn btn-primary" @onclick="SearchBrregAsync" disabled="@searching">
+                    @(searching ? "Søker..." : "Søk i Brreg")
+                </button>
+                @if (searchResults.Any())
+                {
+                    <span class="muted" style="font-size:13px">@searchResults.Count treff — velg enkeltvis nedenfor</span>
+                }
+                @if (searchError is not null)
+                {
+                    <span class="alert-error" style="font-size:13px">@searchError</span>
+                }
+            </div>
+
             @if (searching)
             {
-                <div class="loading" style="margin-top:8px">Søker i Brreg...</div>
+                <div class="loading">Søker i Brreg...</div>
             }
             else if (searchResults.Any())
             {
-                <div class="card" style="margin-top:8px">
+                <div class="card" style="margin-top:4px">
                     @foreach (var e in searchResults)
                     {
                         var isSelected = selectedOrgnrs.Contains(e.organisasjonsnummer);
@@ -294,20 +429,17 @@
                             </div>
                             @if (isSelected)
                             {
-                                <button class="btn btn-sm tag-static" @onclick="() => { selectedOrgnrs.Remove(e.organisasjonsnummer); selectedEnheter.Remove(e.organisasjonsnummer); }">
-                                    ✓ Valgt
-                                </button>
+                                <button class="btn btn-sm tag-static" @onclick="() => { selectedOrgnrs.Remove(e.organisasjonsnummer); selectedEnheter.Remove(e.organisasjonsnummer); }">✓ Valgt</button>
                             }
                             else
                             {
-                                <button class="btn btn-sm" @onclick="() => { selectedEnheter[e.organisasjonsnummer] = e; selectedOrgnrs.Add(e.organisasjonsnummer); }">
-                                    + Legg til
-                                </button>
+                                <button class="btn btn-sm" @onclick="() => { selectedEnheter[e.organisasjonsnummer] = e; selectedOrgnrs.Add(e.organisasjonsnummer); }">+ Legg til</button>
                             }
                         </div>
                     }
                 </div>
             }
+
             @if (selectedOrgnrs.Any())
             {
                 <div style="margin-top:12px">
@@ -403,6 +535,7 @@
     string searchQuery = "";
     string? error;
     string? previewError;
+    string? searchError;
     bool saving, previewLoading, validating, searching;
     List<BrregEnhet> previewResults = [];
     List<OrgnrValidationResult> validationResults = [];
@@ -460,9 +593,15 @@
 
     async Task SearchBrregAsync()
     {
-        if (string.IsNullOrWhiteSpace(searchQuery)) return;
         searching = true;
-        searchResults = await Brreg.SearchAsync(searchQuery);
+        searchError = null;
+        searchResults = await Brreg.SearchAsync(
+            searchQuery,
+            criteria.OrgForm,
+            criteria.NacePrefix,
+            criteria.SektorKode,
+            size: 200);
+        searchError = Brreg.LastError;
         searching = false;
     }
 
