@@ -16,6 +16,7 @@ PoC med kjernefunksjonalitet for målgrupper, adresselister og abonnementslister
 | B-02 | **Autentisering** | Integrasjon med Ansattporten (ID-porten for ansatte). Alle sider krever innlogging |
 | B-03 | **Maskinporten-beskyttet API** | `/api/v1/adresselister` med scope `digdir:kontaktliste.read` |
 | B-04 | **Tilgangsstyring** | Roller: administrator, redaktør, leser. Målgrupper og lister kan eies av team |
+| B-18 | **Virksomhetsisolasjon (multi-tenancy)** | Datamodellen utvides med `Virksomhet`-entitet (orgnr, navn). Alle lister, målgrupper og abonnementslister knyttes til én virksomhet. Alle spørringer filtrerer på innlogget virksomhet. Inkluderer et enkelt administrasjonspanel for å registrere nye virksomheter (erstatter Ansattporten-claims i PoC). Arkitekturelt forutsetning for B-02 og B-04. |
 
 ### 🟡 Middels prioritet
 
@@ -27,6 +28,8 @@ PoC med kjernefunksjonalitet for målgrupper, adresselister og abonnementslister
 | B-08 | **Databasemigreringer** | Flytte fra `EnsureCreated` til EF Core Migrations for produksjonsklar skjemaoppdatering |
 | B-09 | **PostgreSQL-adapter** | Bytte ut SQLite med PostgreSQL for produksjon |
 | B-10 | **Eksport til flere formater** | Excel (.xlsx), FHIR-bundle, eller tilpasset format per mottakersystem |
+| B-19 | **Delte/nasjonale lister** | Noen lister (f.eks. dynamisk kommuneliste) bør eies sentralt og kunne konsumeres av alle virksomheter. Krever et eierskaps- og publiseringsregime: hvem godkjenner, hvem vedlikeholder, hvem kan kopiere. Avhenger av B-18. |
+| B-20 | **Tenor-kobling og testmodus** | Integrasjon med Tenor (Digdir/Skatteetaten) for syntetiske testpersoner og testvirksomheter. I testmodus swappes `BrregService` med en `TenorService` via det eksisterende adapter-grensesnittet — ingen kodeendringer i domenet. Nyttig for utvikling og demo uten reelle data. |
 
 ### 🟢 Lavere prioritet / idéer
 
@@ -39,6 +42,7 @@ PoC med kjernefunksjonalitet for målgrupper, adresselister og abonnementslister
 | B-15 | **Selvbetjeningsportal for abonnenter** | La organisasjoner selv melde seg på/av via e-postlenke |
 | B-16 | **Støtte for personer** | Fysiske personer (ikke bare organisasjoner) i målgrupper |
 | B-17 | **Internasjonal støtte** | Adapter-grensesnitt støtter allerede andre lands enhetsregistre — implementer f.eks. dansk CVR |
+| B-21 | **Frontend-redesign: Designsystemet.no + React** | Erstatt Blazor Server-frontend med React og Digdir sitt designsystem (Designsystemet.no). Minimal API-laget beholdes uendret. Forutsetter at API-kontrakten er stabil og godt testet. Gir bedre UX-konsistens med øvrige Digdir-produkter. |
 
 ---
 
