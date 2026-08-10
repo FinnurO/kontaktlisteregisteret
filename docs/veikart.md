@@ -51,6 +51,8 @@ PoC med kjernefunksjonalitet for målgrupper, adresselister og abonnementslister
 | T-03 | Ingen feilgrenser i UI — ukjente feil vises bare som tom side |
 | T-04 | BrregService cacher ikke — samme søk gjøres på nytt ved hver navigasjon |
 | T-05 | SQLitePCLRaw.lib.e_sqlite3 har kjent sårbarhet (transitiv avhengighet fra EF Core 10) |
+| T-06 | `SeedAsync` (~300 linjer hardkodet data) ligger i `Program.cs` — flytt til `Data/SeedData.cs` |
+| T-07 | API-endepunkter (~140 linjer) ligger i `Program.cs` — flytt til egen `ApiEndpoints`-klasse med extension-metode på `IEndpointRouteBuilder` |
 
 ---
 
