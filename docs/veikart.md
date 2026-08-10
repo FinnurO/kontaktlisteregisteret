@@ -16,7 +16,8 @@ PoC med kjernefunksjonalitet for målgrupper, adresselister og abonnementslister
 | B-02 | **Autentisering** | Integrasjon med Ansattporten (ID-porten for ansatte). Alle sider krever innlogging |
 | B-03 | **Maskinporten-beskyttet API** | `/api/v1/adresselister` med scope `digdir:kontaktliste.read` |
 | B-04 | **Tilgangsstyring** | Roller: administrator, redaktør, leser. Målgrupper og lister kan eies av team |
-| B-18 | **Virksomhetsisolasjon (multi-tenancy)** | Datamodellen utvides med `Virksomhet`-entitet (orgnr, navn). Alle lister, målgrupper og abonnementslister knyttes til én virksomhet. Alle spørringer filtrerer på innlogget virksomhet. Inkluderer et enkelt administrasjonspanel for å registrere nye virksomheter (erstatter Ansattporten-claims i PoC). Arkitekturelt forutsetning for B-02 og B-04. |
+| B-18 | **Virksomhetsisolasjon (multi-tenancy)** | Datamodellen utvides med `Virksomhet`-entitet (orgnr, navn, status, onboardetAt). Alle lister, målgrupper og abonnementslister knyttes til én virksomhet. URL-strategi: `/{orgnr}/adresselister`, `/{orgnr}/malgrupper` osv. — orgnr i URL gir stateless, bookmarkbart og synlig tenant-kontekst. Alle spørringer filtrerer på orgnr fra URL. Arkitekturelt forutsetning for B-02 og B-04. |
+| B-18a | **Virksomhets-onboarding og admin-API** | Virksomheter opprettes **ikke** automatisk ved første innlogging — de må eksplisitt onboardes av en administrator. Inkluderer: admin-UI for å registrere/deaktivere virksomheter, og et admin-API (`GET/POST/DELETE /api/v1/admin/virksomheter`) beskyttet av et eget scope/rolle. Når Ansattporten er på plass, sjekkes innlogget brukers orgnr mot godkjent liste — avvises hvis ikke funnet. Avhenger av B-18. |
 
 ### 🟡 Middels prioritet
 
