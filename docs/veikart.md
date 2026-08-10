@@ -31,6 +31,11 @@ PoC med kjernefunksjonalitet for målgrupper, adresselister og abonnementslister
 | B-10 | **Eksport til flere formater** | Excel (.xlsx), FHIR-bundle, eller tilpasset format per mottakersystem |
 | B-19 | **Delte/nasjonale lister** | Noen lister (f.eks. dynamisk kommuneliste) bør eies sentralt og kunne konsumeres av alle virksomheter. Krever et eierskaps- og publiseringsregime: hvem godkjenner, hvem vedlikeholder, hvem kan kopiere. Avhenger av B-18. |
 | B-20 | **Tenor-kobling og testmodus** | Integrasjon med Tenor (Digdir/Skatteetaten) for syntetiske testpersoner og testvirksomheter. I testmodus swappes `BrregService` med en `TenorService` via det eksisterende adapter-grensesnittet — ingen kodeendringer i domenet. Nyttig for utvikling og demo uten reelle data. |
+| B-22 | **Sektorkoder fra SSB KLASS** | Kodelisten for institusjonell sektorkode (SSB klassifikasjon 39) er i dag hardkodet og delvis feil (6100 er statlig forvaltning, ikke kommunal). Hent kodelisten fra [SSB KLASS API](https://www.ssb.no/klass/klassifikasjoner/39) ved oppstart/cache, bruk beskrivelsene derfra i filter-UI og visning. Tilsvarende for næringskoder (klassifikasjon 6). |
+| B-23 | **Næringskoder SN2025 — 5-nivå hierarki** | Ny norsk standard for næringsgruppering (SN2025) trådte i kraft 1. sept. 2025 og erstatter SN2007. Standarden har fem nivåer: Næringshovedområde (C) → Næring (10) → Næringshovedgruppe (10.2) → Næringsgruppe (10.20) → Næringsundergruppe (10.201, norsk tillegg). Det er nivå 5 (femsifret) som brukes som næringskode i Brreg. Filter-UI bør støtte valg på alle nivåer med hierarkisk nedtrekk, og feltet kalles konsekvent «næringskode» (ikke NACE). Ref: [SSB SN2025](https://www.ssb.no/virksomheter-foretak-og-regnskap/metoder-og-dokumentasjon/ny-standard-for-naeringsgruppering-innfores-1.september-2025). |
+| B-24 | **Multiple select på filtre** | I dag er hvert filter (organisasjonsform, næringskode, sektorkode) et enkeltvalg. Brreg sin søkeportal ([virksomhet.brreg.no](https://virksomhet.brreg.no/nb/oppslag/enheter)) støtter multiple select. Implementer flervalg slik at man f.eks. kan velge næringskode=50.101 OG næringskode=50.201 i samme dynamiske målgruppe. API-kallet kombineres med OR-logikk mellom verdier innen samme filtertype. |
+| B-25 | **Select/deselect all i statisk målgruppe** | Når man søker etter virksomheter for å legge til i en statisk målgruppe, vises resultater enkeltvis. Legg til header-checkbox som velger/fravelger alle treff på én gang, etterfulgt av individuelle justeringer. Vanlig mønster fra tabellbaserte UI-er. |
+| B-26 | **Hierarki av målgrupper (kompositt og AND-filter)** | To mekanismer ønskes: (a) En dynamisk målgruppe kan ha flere filterkritierier med AND-logikk — f.eks. næringskode=havner OG selskapsform=IKS. I dag er det ett filter per dimensjon. (b) En målgruppe kan inkludere andre målgrupper som «barn» — f.eks. «Havner» = «Havner KF» + «Havner IKS» + «Havner Andre». Dette gjør det mulig å bygge hierarkier av gjenbrukbare segmenter og kombinere dem i adresselister uten å duplisere data. |
 
 ### 🟢 Lavere prioritet / idéer
 
@@ -44,6 +49,8 @@ PoC med kjernefunksjonalitet for målgrupper, adresselister og abonnementslister
 | B-16 | **Støtte for personer** | Fysiske personer (ikke bare organisasjoner) i målgrupper |
 | B-17 | **Internasjonal støtte** | Adapter-grensesnitt støtter allerede andre lands enhetsregistre — implementer f.eks. dansk CVR |
 | B-21 | **Frontend-redesign: Designsystemet.no + React** | Erstatt Blazor Server-frontend med React og Digdir sitt designsystem (Designsystemet.no). Minimal API-laget beholdes uendret. Forutsetter at API-kontrakten er stabil og godt testet. Gir bedre UX-konsistens med øvrige Digdir-produkter. |
+| B-27 | **Sortering alfabetisk** | Mangler alfabetisk sortering i oversiktslister for målgrupper, adresselister og abonnementslister. Bør kombineres med valg av sorteringsrekkefølge (nyeste / alfabetisk / antall mottakere). |
+| B-28 | **Brreg-hendelser og sist-oppdatert** | Abonnere på Brreg sitt [oppdateringer-endepunkt](https://data.brreg.no/enhetsregisteret/api/dokumentasjon/no/index.html#tag/oppdateringer) for å spore endringer på virksomheter i dynamiske og statiske lister. Innfør `sistOppdatert`-felt på listene og varsle redaktøren om endringer som kan påvirke listens innhold (f.eks. virksomhet slettet, skiftet navn, skiftet næringskode). |
 
 ---
 
@@ -75,3 +82,9 @@ PoC med kjernefunksjonalitet for målgrupper, adresselister og abonnementslister
 | Brreg-søk med filtre | Organisasjonsform, næringskode, sektorkode, aktivitetsstatus |
 | Hierarkivisning i Brreg | Overordnet enhet og underenheter |
 | Oppgradering til .NET 10 | EF Core 10.0.0 |
+| B-18 Virksomhetsisolasjon (multi-tenancy) | `/{orgnr}/`-URL-strategi, `Virksomhet`-entitet, alle data scoped per virksomhet |
+| B-18a Virksomhets-onboarding og admin-panel | `/admin/virksomheter`, `POST /api/v1/admin/virksomheter`, ingen auto-oppretting |
+| Navneoppslag (lim inn liste) | Ny fane i Brreg-søk: lim inn navn, slår opp orgnr for hvert navn fra Brreg |
+| Bugfix: redigere målgruppenavn | Inline-redigering av navn i MalgruppeDetalj, inkl. kopier |
+| Bugfix: HTTP 400 Brreg-paginering | Guard: `size × (page+1) ≤ 10 000` — avkorter og viser melding |
+| Bugfix: virksomhetsdetaljer i flatvisning | OrgDetalj-komponent nå klikkbar i flatvisning (ikke bare trevisning) |

@@ -1,5 +1,6 @@
-@page "/abonnenter/{Id:int}"
+@page "/{Orgnr}/abonnenter/{Id:int}"
 @inject AbonnementslisteService Svc
+@inject VirksomhetContext Ctx
 @inject NavigationManager Nav
 
 <PageTitle>@(liste?.Navn ?? "Abonnementsliste") — Kontaktlisteregisteret</PageTitle>
@@ -12,7 +13,7 @@ else
 {
     <div class="page-header">
         <div>
-            <a href="/abonnenter" class="back-link">← Abonnementslister</a>
+            <a href="@($"/{Orgnr}/abonnenter")" class="back-link">← Abonnementslister</a>
             <h1>@liste.Navn</h1>
         </div>
         <span class="tag">@liste.Abonnenter.Count abonnenter</span>
@@ -114,6 +115,7 @@ else
 }
 
 @code {
+    [Parameter] public string Orgnr { get; set; } = "";
     [Parameter] public int Id { get; set; }
 
     Abonnementsliste? liste;
@@ -129,8 +131,11 @@ else
     string redigerBeskrivelse = string.Empty;
     string redigerFeil = string.Empty;
 
-    protected override async Task OnInitializedAsync() =>
+    protected override async Task OnParametersSetAsync()
+    {
+        await Ctx.LoadAsync(Orgnr);
         liste = await Svc.GetAsync(Id);
+    }
 
     async Task TastNed(KeyboardEventArgs e)
     {
@@ -186,7 +191,7 @@ else
     async Task SlettListeAsync()
     {
         await Svc.SlettListeAsync(Id);
-        Nav.NavigateTo("/abonnenter");
+        Nav.NavigateTo($"/{Orgnr}/abonnenter");
     }
 
     static string KildeTagClass(AbonnentKilde k) =>

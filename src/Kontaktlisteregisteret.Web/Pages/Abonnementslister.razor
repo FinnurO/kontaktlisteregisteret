@@ -1,8 +1,11 @@
-@page "/abonnenter"
+@page "/{Orgnr}/abonnenter"
 @inject AbonnementslisteService Svc
+@inject VirksomhetContext Ctx
 @inject NavigationManager Nav
 
 <PageTitle>Abonnementslister — Kontaktlisteregisteret</PageTitle>
+
+@if (Ctx.IsUnknown) { return; }
 
 <div class="page-header">
     <h1>Abonnementslister</h1>
@@ -58,7 +61,7 @@ else
     <div class="card">
         @foreach (var l in lister)
         {
-            var url = "abonnenter/" + l.Id;
+            var url = $"{Orgnr}/abonnenter/{l.Id}";
             <div class="card-row" @onclick="() => Nav.NavigateTo(url)" style="cursor:pointer">
                 <div class="grow">
                     <div class="row-name">@l.Navn</div>
@@ -82,6 +85,8 @@ else
 }
 
 @code {
+    [Parameter] public string Orgnr { get; set; } = "";
+
     List<Abonnementsliste> lister = [];
     bool visOpprettSkjema;
     string nyttNavn = string.Empty;
@@ -89,19 +94,23 @@ else
     string opprettFeil = string.Empty;
     bool oppretter;
 
-    protected override async Task OnInitializedAsync() =>
-        lister = await Svc.GetAllAsync();
+    protected override async Task OnParametersSetAsync()
+    {
+        await Ctx.LoadAsync(Orgnr);
+        if (Ctx.Current is not null)
+            lister = await Svc.GetAllAsync(Ctx.Current.Id);
+    }
 
     async Task OpprettAsync()
     {
-        if (string.IsNullOrWhiteSpace(nyttNavn)) return;
+        if (string.IsNullOrWhiteSpace(nyttNavn) || Ctx.Current is null) return;
         oppretter = true;
         opprettFeil = string.Empty;
 
         try
         {
-            var liste = await Svc.OpprettAsync(nyttNavn, nyBeskrivelse);
-            Nav.NavigateTo($"/abonnenter/{liste.Id}");
+            var liste = await Svc.OpprettAsync(nyttNavn, nyBeskrivelse, virksomhetId: Ctx.Current.Id);
+            Nav.NavigateTo($"/{Orgnr}/abonnenter/{liste.Id}");
         }
         catch (Exception ex)
         {

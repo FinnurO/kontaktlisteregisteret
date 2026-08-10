@@ -67,12 +67,21 @@ public class BrregService(HttpClient http, ILogger<BrregService> logger)
         string? nacePrefix = null, string? sektorKode = null, string? aktivitet = null)
     {
         LastError = null;
+        const int size = 200;
+        const int brregLimit = 10_000;
         var all = new List<BrregEnhet>();
         int page = 0, totalPages = 1;
 
         do
         {
-            var url = $"{BaseUrl}/enheter?size=200&page={page}&{BuildParams("", orgform, nacePrefix, sektorKode, aktivitet)}";
+            // Brreg returnerer HTTP 400 hvis size*(page+1) > 10 000
+            if (size * (page + 1) > brregLimit)
+            {
+                LastError = $"Brreg begrenser søk til {brregLimit:N0} treff. Returnerer de første {all.Count} enhetene.";
+                break;
+            }
+
+            var url = $"{BaseUrl}/enheter?size={size}&page={page}&{BuildParams("", orgform, nacePrefix, sektorKode, aktivitet)}";
             var (result, error) = await FetchAsync<BrregSearchResult>(url);
             if (error is not null) { LastError = error; break; }
             if (result?.Embedded?.enheter is { } batch) all.AddRange(batch);

@@ -8,8 +8,18 @@ public class AdresselisteService(AppDbContext db)
 {
     // ── Queries ─────────────────────────────────────────────────────────────
 
+    /// Henter alle lister uavhengig av virksomhet — brukes av maskin-API.
     public async Task<List<Adresseliste>> GetAllAsync() =>
         await db.Adresselister
+            .Include(a => a.Målgrupper).ThenInclude(m => m.Målgruppe)
+            .Include(a => a.Mottakere)
+            .OrderByDescending(a => a.OpprettetAt)
+            .ToListAsync();
+
+    /// Henter lister filtrert på virksomhet — brukes av Blazor UI.
+    public async Task<List<Adresseliste>> GetAllAsync(int virksomhetId) =>
+        await db.Adresselister
+            .Where(a => a.VirksomhetId == virksomhetId)
             .Include(a => a.Målgrupper).ThenInclude(m => m.Målgruppe)
             .Include(a => a.Mottakere)
             .OrderByDescending(a => a.OpprettetAt)
@@ -34,13 +44,15 @@ public class AdresselisteService(AppDbContext db)
 
     // ── Mutations ────────────────────────────────────────────────────────────
 
-    public async Task<Adresseliste> CreateAsync(string tittel, string? beskrivelse = null, string? opprettetAv = null)
+    public async Task<Adresseliste> CreateAsync(
+        string tittel, string? beskrivelse = null, string? opprettetAv = null, int? virksomhetId = null)
     {
         var liste = new Adresseliste
         {
             Tittel = tittel,
             Beskrivelse = beskrivelse,
-            OpprettetAv = opprettetAv
+            OpprettetAv = opprettetAv,
+            VirksomhetId = virksomhetId
         };
         db.Adresselister.Add(liste);
         await db.SaveChangesAsync();
@@ -245,7 +257,8 @@ public class AdresselisteService(AppDbContext db)
             Beskrivelse = original.Beskrivelse,
             OpprettetAv = original.OpprettetAv,
             Status = AdresselisteStatus.Utkast,
-            EkskluderteJson = original.EkskluderteJson  // behold eksklusjoner
+            EkskluderteJson = original.EkskluderteJson,  // behold eksklusjoner
+            VirksomhetId = original.VirksomhetId          // behold tenant-tilknytning
         };
         db.Adresselister.Add(kopi);
         await db.SaveChangesAsync();

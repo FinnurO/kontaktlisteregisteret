@@ -1,20 +1,22 @@
-@page "/adresselister"
+@page "/{Orgnr}/adresselister"
 @inject AdresselisteService Svc
+@inject VirksomhetContext Ctx
 @inject NavigationManager Nav
-@inject TargetGroupService TgSvc
 
 <PageTitle>Adresselister — Kontaktlisteregisteret</PageTitle>
 
+@if (Ctx.IsUnknown) { return; }
+
 <div class="page-header">
     <h1>Adresselister</h1>
-    <a href="/adresselister/ny" class="btn btn-primary">+ Ny adresseliste</a>
+    <a href="@($"{Orgnr}/adresselister/ny")" class="btn btn-primary">+ Ny adresseliste</a>
 </div>
 
 @if (!lister.Any())
 {
     <div class="empty-state">
         Ingen adresselister ennå.
-        <a href="/adresselister/ny" class="btn btn-primary" style="margin-top:12px">Opprett din første</a>
+        <a href="@($"{Orgnr}/adresselister/ny")" class="btn btn-primary" style="margin-top:12px">Opprett din første</a>
     </div>
 }
 else
@@ -22,7 +24,7 @@ else
     <div class="card">
         @foreach (var a in lister)
         {
-            var url = "adresselister/" + a.Id;
+            var url = $"{Orgnr}/adresselister/{a.Id}";
             <div class="card-row" @onclick="() => Nav.NavigateTo(url)" style="cursor:pointer">
                 <div class="grow">
                     <div class="row-name">@a.Tittel</div>
@@ -45,15 +47,21 @@ else
 }
 
 @code {
+    [Parameter] public string Orgnr { get; set; } = "";
+
     List<Adresseliste> lister = [];
 
-    protected override async Task OnInitializedAsync() =>
-        lister = await Svc.GetAllAsync();
+    protected override async Task OnParametersSetAsync()
+    {
+        await Ctx.LoadAsync(Orgnr);
+        if (Ctx.Current is null) return;
+        lister = await Svc.GetAllAsync(Ctx.Current.Id);
+    }
 
     async Task KopierAsync(int id)
     {
         var kopi = await Svc.KopierAsync(id);
-        Nav.NavigateTo($"/adresselister/{kopi.Id}");
+        Nav.NavigateTo($"/{Orgnr}/adresselister/{kopi.Id}");
     }
 
     static string StatusLabel(AdresselisteStatus s) => s switch

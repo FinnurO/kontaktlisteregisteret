@@ -1,33 +1,133 @@
 @inherits LayoutComponentBase
+@implements IDisposable
+@inject VirksomhetContext Ctx
+@inject NavigationManager Nav
+
+@{
+    var relativePath = Nav.ToBaseRelativePath(Nav.Uri);
+    var orgnr = VirksomhetContext.ExtractOrgnrFromPath(relativePath);
+    var erTenantRute = orgnr is not null;
+}
 
 <div class="app-shell">
     <nav class="sidebar">
         <div class="sidebar-header">
-            <span class="sidebar-logo">Kontaktlisteregisteret</span>
-            <span class="sidebar-env">PoC · Ingen pålogging</span>
+            <a href="/" class="sidebar-logo" style="text-decoration:none;color:inherit">
+                Kontaktlisteregisteret
+            </a>
+            @if (Ctx.Current is not null)
+            {
+                <span class="sidebar-env" title="@Ctx.Current.Orgnr" style="font-weight:600;font-size:.8rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+                    @Ctx.Current.Navn
+                </span>
+                <span class="sidebar-env" style="font-family:monospace;font-size:.75rem;color:var(--gray-500)">
+                    @Ctx.Current.Orgnr
+                </span>
+            }
+            else if (!erTenantRute)
+            {
+                <span class="sidebar-env">PoC · Ingen pålogging</span>
+            }
         </div>
-        <div class="nav-section">Hoved</div>
-        <NavLink class="nav-item" href="" Match="NavLinkMatch.All">
-            <span class="nav-icon">⊞</span> Oversikt
-        </NavLink>
-        <NavLink class="nav-item" href="adresselister">
-            <span class="nav-icon">✉</span> Adresselister
-        </NavLink>
-        <NavLink class="nav-item" href="malgrupper">
-            <span class="nav-icon">☰</span> Målgrupper
-        </NavLink>
-        <NavLink class="nav-item" href="abonnenter">
-            <span class="nav-icon">&#64;</span> Abonnementslister
-        </NavLink>
-        <NavLink class="nav-item" href="brreg">
-            <span class="nav-icon">⊕</span> Brreg-søk
-        </NavLink>
-        <div class="nav-section">API</div>
-        <NavLink class="nav-item" href="api-docs">
-            <span class="nav-icon">{ }</span> API-dokumentasjon
-        </NavLink>
+
+        @if (Ctx.Current is not null)
+        {
+            var o = Ctx.Current.Orgnr;
+            <div class="nav-section">Hoved</div>
+            <NavLink class="nav-item" href="@o" Match="NavLinkMatch.All">
+                <span class="nav-icon">⊞</span> Oversikt
+            </NavLink>
+            <NavLink class="nav-item" href="@($"{o}/adresselister")">
+                <span class="nav-icon">✉</span> Adresselister
+            </NavLink>
+            <NavLink class="nav-item" href="@($"{o}/malgrupper")">
+                <span class="nav-icon">☰</span> Målgrupper
+            </NavLink>
+            <NavLink class="nav-item" href="@($"{o}/abonnenter")">
+                <span class="nav-icon">&#64;</span> Abonnementslister
+            </NavLink>
+            <NavLink class="nav-item" href="brreg">
+                <span class="nav-icon">⊕</span> Brreg-søk
+            </NavLink>
+            <div class="nav-section">API</div>
+            <NavLink class="nav-item" href="api-docs">
+                <span class="nav-icon">{ }</span> API-dokumentasjon
+            </NavLink>
+            <div class="nav-section" style="margin-top:auto">Admin</div>
+            <NavLink class="nav-item" href="/">
+                <span class="nav-icon">⇄</span> Bytt virksomhet
+            </NavLink>
+            <NavLink class="nav-item" href="admin/virksomheter">
+                <span class="nav-icon">⚙</span> Virksomheter
+            </NavLink>
+        }
+        else
+        {
+            <div class="nav-section">Generelt</div>
+            <NavLink class="nav-item" href="" Match="NavLinkMatch.All">
+                <span class="nav-icon">⊞</span> Forsiden
+            </NavLink>
+            <NavLink class="nav-item" href="brreg">
+                <span class="nav-icon">⊕</span> Brreg-søk
+            </NavLink>
+            <div class="nav-section">Admin</div>
+            <NavLink class="nav-item" href="admin/virksomheter">
+                <span class="nav-icon">⚙</span> Virksomheter
+            </NavLink>
+        }
     </nav>
     <div class="main-area">
-        @Body
+        @if (erTenantRute && Ctx.IsUnknown)
+        {
+            <div class="page-content" style="padding:2rem">
+                <div class="page-header">
+                    <h1>Ukjent virksomhet</h1>
+                </div>
+                <div class="card" style="padding:1.5rem;max-width:560px">
+                    <p style="margin:0 0 1rem">
+                        Ingen aktiv virksomhet er registrert med orgnr <strong style="font-family:monospace">@orgnr</strong>.
+                        Virksomheten må onboardes av Digdir før den kan brukes.
+                    </p>
+                    <div style="display:flex;gap:.75rem">
+                        <a href="/" class="btn btn-primary">← Til forsiden</a>
+                        <a href="admin/virksomheter" class="btn">Administrer virksomheter</a>
+                    </div>
+                </div>
+            </div>
+        }
+        else if (erTenantRute && !Ctx.IsLoaded)
+        {
+            <div class="loading" style="padding:2rem">Laster virksomhet...</div>
+        }
+        else
+        {
+            @Body
+        }
     </div>
 </div>
+
+@code {
+    protected override async Task OnInitializedAsync()
+    {
+        Nav.LocationChanged += OnLocationChanged;
+        await LastTenantAsync(Nav.Uri);
+    }
+
+    async void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        await LastTenantAsync(e.Location);
+        StateHasChanged();
+    }
+
+    async Task LastTenantAsync(string uri)
+    {
+        var rel = Nav.ToBaseRelativePath(uri);
+        var o = VirksomhetContext.ExtractOrgnrFromPath(rel);
+        if (o is not null)
+            await Ctx.LoadAsync(o);
+        else
+            Ctx.Reset();
+    }
+
+    public void Dispose() => Nav.LocationChanged -= OnLocationChanged;
+}

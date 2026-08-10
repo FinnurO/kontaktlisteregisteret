@@ -4,6 +4,7 @@ namespace Kontaktlisteregisteret.Web.Data;
 
 public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
 {
+    public DbSet<Virksomhet> Virksomheter => Set<Virksomhet>();
     public DbSet<TargetGroup> TargetGroups => Set<TargetGroup>();
     public DbSet<Recipient> Recipients => Set<Recipient>();
     public DbSet<TargetGroupMember> TargetGroupMembers => Set<TargetGroupMember>();
@@ -16,7 +17,10 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
     protected override void OnModelCreating(ModelBuilder b)
     {
+        b.Entity<Virksomhet>().HasIndex(x => x.Orgnr).IsUnique();
+
         b.Entity<TargetGroup>().HasIndex(x => x.Name);
+        b.Entity<TargetGroup>().HasIndex(x => x.VirksomhetId);
         b.Entity<Recipient>().HasIndex(x => x.ExternalId).IsUnique();
         b.Entity<TargetGroupMember>().HasKey(x => x.Id);
         b.Entity<TargetGroupMember>()
@@ -26,10 +30,27 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         b.Entity<AdresselisteAbonnementsliste>()
             .HasKey(x => new { x.AdresselisteId, x.AbonnementslisteId });
         b.Entity<Adresseliste>().HasIndex(x => x.Status);
+        b.Entity<Adresseliste>().HasIndex(x => x.VirksomhetId);
         b.Entity<Abonnent>()
             .HasIndex(x => new { x.AbonnementslisteId, x.Epost }).IsUnique();
+        b.Entity<Abonnementsliste>().HasIndex(x => x.VirksomhetId);
     }
 }
+
+// ── Virksomhet ───────────────────────────────────────────────────────────────
+
+public class Virksomhet
+{
+    public int Id { get; set; }
+    /// Organisasjonsnummer — 9 siffer, unikt
+    public string Orgnr { get; set; } = "";
+    public string Navn { get; set; } = "";
+    public VirksomhetStatus Status { get; set; } = VirksomhetStatus.Aktiv;
+    public DateTime OnboardetAt { get; set; } = DateTime.UtcNow;
+    public string? OnboardetAv { get; set; }
+}
+
+public enum VirksomhetStatus { Aktiv, Inaktiv }
 
 public class TargetGroup
 {
@@ -39,6 +60,8 @@ public class TargetGroup
     public TargetGroupScope Scope { get; set; }
     public string? DynamicCriteriaJson { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public int? VirksomhetId { get; set; }
+    public Virksomhet? Virksomhet { get; set; }
     public List<TargetGroupMember> Members { get; set; } = [];
 }
 
@@ -89,6 +112,8 @@ public class Adresseliste
     public DateTime? LåstAt { get; set; }
     /// JSON-serialisert List<string> med ExternalId (orgnr) for ekskluderte mottakere
     public string? EkskluderteJson { get; set; }
+    public int? VirksomhetId { get; set; }
+    public Virksomhet? Virksomhet { get; set; }
     public List<AdresselisteMålgruppe> Målgrupper { get; set; } = [];
     public List<AdresselisteAbonnementsliste> Abonnementslister { get; set; } = [];
     public List<AdresselisteMottaker> Mottakere { get; set; } = [];
@@ -105,6 +130,8 @@ public class Abonnementsliste
     public string? Beskrivelse { get; set; }
     public DateTime OpprettetAt { get; set; } = DateTime.UtcNow;
     public string? OpprettetAv { get; set; }
+    public int? VirksomhetId { get; set; }
+    public Virksomhet? Virksomhet { get; set; }
     public List<Abonnent> Abonnenter { get; set; } = [];
 }
 

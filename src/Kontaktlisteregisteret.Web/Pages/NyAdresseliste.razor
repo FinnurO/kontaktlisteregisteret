@@ -1,12 +1,14 @@
-@page "/adresselister/ny"
+@page "/{Orgnr}/adresselister/ny"
 @inject AdresselisteService Svc
-@inject TargetGroupService TgSvc
+@inject VirksomhetContext Ctx
 @inject NavigationManager Nav
 
 <PageTitle>Ny adresseliste — Kontaktlisteregisteret</PageTitle>
 
+@if (Ctx.IsUnknown) { return; }
+
 <div class="page-header">
-    <a href="/adresselister" class="btn btn-sm">← Tilbake</a>
+    <a href="@($"/{Orgnr}/adresselister")" class="btn btn-sm">← Tilbake</a>
     <h1>Ny adresseliste</h1>
 </div>
 
@@ -35,16 +37,23 @@
 </div>
 
 @code {
+    [Parameter] public string Orgnr { get; set; } = "";
+
     string tittel = "", beskrivelse = "";
     string? error;
     bool saving;
 
+    protected override async Task OnParametersSetAsync() =>
+        await Ctx.LoadAsync(Orgnr);
+
     async Task CreateAsync()
     {
         if (string.IsNullOrWhiteSpace(tittel)) { error = "Tittel er påkrevd."; return; }
+        if (Ctx.Current is null) return;
         saving = true;
         error = null;
-        var liste = await Svc.CreateAsync(tittel.Trim(), beskrivelse.Trim().Length > 0 ? beskrivelse.Trim() : null);
-        Nav.NavigateTo($"/adresselister/{liste.Id}");
+        var besk = beskrivelse.Trim().Length > 0 ? beskrivelse.Trim() : (string?)null;
+        var liste = await Svc.CreateAsync(tittel.Trim(), besk, virksomhetId: Ctx.Current.Id);
+        Nav.NavigateTo($"/{Orgnr}/adresselister/{liste.Id}");
     }
 }

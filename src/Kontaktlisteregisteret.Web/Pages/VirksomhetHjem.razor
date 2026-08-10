@@ -1,0 +1,112 @@
+@page "/{Orgnr}"
+@inject TargetGroupService TgSvc
+@inject AdresselisteService AdrSvc
+@inject VirksomhetContext Ctx
+@inject NavigationManager Nav
+
+<PageTitle>Oversikt — @(Ctx.Current?.Navn ?? Orgnr)</PageTitle>
+
+@if (Ctx.IsUnknown) { return; }  @* MainLayout håndterer feilvisning *@
+
+<div class="page-header">
+    <h1>Oversikt</h1>
+</div>
+
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-label">Adresselister</div>
+        <div class="stat-value">@adresselister.Count</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-label">Låste lister</div>
+        <div class="stat-value">@adresselister.Count(a => a.Status == AdresselisteStatus.Låst)</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-label">Målgrupper</div>
+        <div class="stat-value">@groups.Count</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-label">Mottakere totalt</div>
+        <div class="stat-value">@groups.Sum(g => g.Members.Count)</div>
+    </div>
+</div>
+
+<div class="section-header" style="margin-top:24px">
+    <span class="section-title">Siste adresselister</span>
+    <a href="@($"{Orgnr}/adresselister/ny")" class="btn btn-primary">+ Ny adresseliste</a>
+</div>
+
+@if (!adresselister.Any())
+{
+    <div class="empty-state">
+        <p>Ingen adresselister ennå.</p>
+        <a href="@($"{Orgnr}/adresselister/ny")" class="btn btn-primary">Opprett din første</a>
+    </div>
+}
+else
+{
+    <div class="card" style="margin-bottom:24px">
+        @foreach (var a in adresselister.Take(5))
+        {
+            var url = $"{Orgnr}/adresselister/{a.Id}";
+            <div class="card-row" @onclick="() => Nav.NavigateTo(url)" style="cursor:pointer">
+                <div class="grow">
+                    <div class="row-name">@a.Tittel</div>
+                    <div class="row-sub">
+                        @a.Mottakere.Count mottakere ·
+                        @if (a.LåstAt.HasValue) { <text>Låst @a.LåstAt.Value.ToString("dd. MMM yyyy")</text> }
+                        else { <text>@a.OpprettetAt.ToString("dd. MMM yyyy")</text> }
+                    </div>
+                </div>
+                <span class="tag @(a.Status == AdresselisteStatus.Låst ? "tag-static" : a.Status == AdresselisteStatus.Klar ? "tag-dynamic" : "")">
+                    @a.Status
+                </span>
+            </div>
+        }
+    </div>
+}
+
+<div class="section-header">
+    <span class="section-title">Siste målgrupper</span>
+    <a href="@($"{Orgnr}/malgrupper/ny")" class="btn btn-sm">+ Ny målgruppe</a>
+</div>
+
+@if (!groups.Any())
+{
+    <div class="empty-state">Ingen målgrupper ennå.</div>
+}
+else
+{
+    <div class="card">
+        @foreach (var g in groups.Take(5))
+        {
+            var url = $"{Orgnr}/malgrupper/{g.Id}";
+            <div class="card-row" @onclick="() => Nav.NavigateTo(url)" style="cursor:pointer">
+                <div class="grow">
+                    <div class="row-name">@g.Name</div>
+                    <div class="row-sub">@g.Type · @g.Members.Count mottakere · @g.CreatedAt.ToString("dd. MMM yyyy")</div>
+                </div>
+                <span class="tag @(g.Type == TargetGroupType.Dynamic ? "tag-dynamic" : "tag-static")">
+                    @(g.Type == TargetGroupType.Dynamic ? "Dynamisk" : "Statisk")
+                </span>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public string Orgnr { get; set; } = "";
+
+    List<TargetGroup> groups = [];
+    List<Adresseliste> adresselister = [];
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await Ctx.LoadAsync(Orgnr);
+        if (Ctx.Current is null) return;
+
+        var id = Ctx.Current.Id;
+        groups = await TgSvc.GetAllAsync(id);
+        adresselister = await AdrSvc.GetAllAsync(id);
+    }
+}

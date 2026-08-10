@@ -1,12 +1,15 @@
-@page "/malgrupper"
+@page "/{Orgnr}/malgrupper"
 @inject TargetGroupService Svc
+@inject VirksomhetContext Ctx
 @inject NavigationManager Nav
 
 <PageTitle>Målgrupper — Kontaktlisteregisteret</PageTitle>
 
+@if (Ctx.IsUnknown) { return; }
+
 <div class="page-header">
     <h1>Målgrupper</h1>
-    <a href="/malgrupper/ny" class="btn btn-primary">+ Ny målgruppe</a>
+    <a href="@($"/{Orgnr}/malgrupper/ny")" class="btn btn-primary">+ Ny målgruppe</a>
 </div>
 
 @if (loading)
@@ -17,7 +20,7 @@ else if (!groups.Any())
 {
     <div class="empty-state">
         <p>Ingen målgrupper er opprettet ennå.</p>
-        <a href="/malgrupper/ny" class="btn btn-primary">Opprett din første målgruppe</a>
+        <a href="@($"/{Orgnr}/malgrupper/ny")" class="btn btn-primary">Opprett din første målgruppe</a>
     </div>
 }
 else
@@ -25,7 +28,7 @@ else
     <div class="card">
         @foreach (var g in groups)
         {
-            var url = "malgrupper/" + g.Id;
+            var url = $"{Orgnr}/malgrupper/{g.Id}";
             <div class="card-row" @onclick="() => Nav.NavigateTo(url)">
                 <div class="grow">
                     <div class="row-name">@g.Name</div>
@@ -46,25 +49,31 @@ else
 }
 
 @code {
+    [Parameter] public string Orgnr { get; set; } = "";
+
     List<TargetGroup> groups = [];
     bool loading = true;
 
-    protected override async Task OnInitializedAsync()
+    protected override async Task OnParametersSetAsync()
     {
-        groups = await Svc.GetAllAsync();
+        loading = true;
+        await Ctx.LoadAsync(Orgnr);
+        if (Ctx.Current is not null)
+            groups = await Svc.GetAllAsync(Ctx.Current.Id);
         loading = false;
     }
 
     async Task KopierAsync(int id)
     {
         var kopi = await Svc.KopierAsync(id);
-        Nav.NavigateTo($"/malgrupper/{kopi.Id}");
+        Nav.NavigateTo($"/{Orgnr}/malgrupper/{kopi.Id}");
     }
 
     async Task DeleteAsync(int id)
     {
         await Svc.DeleteAsync(id);
-        groups = await Svc.GetAllAsync();
+        if (Ctx.Current is not null)
+            groups = await Svc.GetAllAsync(Ctx.Current.Id);
     }
 
     static string TagClass(TargetGroupType t) => t == TargetGroupType.Dynamic ? "tag-dynamic" : "tag-static";

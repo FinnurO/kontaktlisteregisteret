@@ -7,8 +7,17 @@ public class AbonnementslisteService(AppDbContext db)
 {
     // ── Lister ────────────────────────────────────────────────────────────────
 
+    /// Henter alle abonnementslister uavhengig av virksomhet — brukes av maskin-API.
     public Task<List<Abonnementsliste>> GetAllAsync() =>
         db.Abonnementslister
+            .Include(l => l.Abonnenter)
+            .OrderByDescending(l => l.OpprettetAt)
+            .ToListAsync();
+
+    /// Henter abonnementslister filtrert på virksomhet — brukes av Blazor UI.
+    public Task<List<Abonnementsliste>> GetAllAsync(int virksomhetId) =>
+        db.Abonnementslister
+            .Where(l => l.VirksomhetId == virksomhetId)
             .Include(l => l.Abonnenter)
             .OrderByDescending(l => l.OpprettetAt)
             .ToListAsync();
@@ -18,13 +27,15 @@ public class AbonnementslisteService(AppDbContext db)
             .Include(l => l.Abonnenter)
             .FirstOrDefaultAsync(l => l.Id == id);
 
-    public async Task<Abonnementsliste> OpprettAsync(string navn, string? beskrivelse, string? opprettetAv = null)
+    public async Task<Abonnementsliste> OpprettAsync(
+        string navn, string? beskrivelse, string? opprettetAv = null, int? virksomhetId = null)
     {
         var liste = new Abonnementsliste
         {
             Navn = navn.Trim(),
             Beskrivelse = string.IsNullOrWhiteSpace(beskrivelse) ? null : beskrivelse.Trim(),
-            OpprettetAv = string.IsNullOrWhiteSpace(opprettetAv) ? null : opprettetAv.Trim()
+            OpprettetAv = string.IsNullOrWhiteSpace(opprettetAv) ? null : opprettetAv.Trim(),
+            VirksomhetId = virksomhetId
         };
         db.Abonnementslister.Add(liste);
         await db.SaveChangesAsync();

@@ -1,12 +1,13 @@
-@page "/malgrupper/ny"
+@page "/{Orgnr}/malgrupper/ny"
 @inject TargetGroupService Svc
 @inject BrregService Brreg
+@inject VirksomhetContext Ctx
 @inject NavigationManager Nav
 
 <PageTitle>Ny målgruppe — Kontaktlisteregisteret</PageTitle>
 
 <div class="page-header">
-    <a href="/malgrupper" class="btn btn-sm">← Tilbake</a>
+    <a href="@($"/{Orgnr}/malgrupper")" class="btn btn-sm">← Tilbake</a>
     <h1>Ny målgruppe</h1>
 </div>
 
@@ -550,6 +551,8 @@
 </div>
 
 @code {
+    [Parameter] public string Orgnr { get; set; } = "";
+
     int step = 1;
     string name = "";
     string type = "dynamic";
@@ -639,16 +642,21 @@
         searching = false;
     }
 
+    protected override async Task OnParametersSetAsync() =>
+        await Ctx.LoadAsync(Orgnr);
+
     async Task CreateAsync()
     {
         if (string.IsNullOrWhiteSpace(name)) { error = "Navn er påkrevd."; return; }
+        if (Ctx.Current is null) return;
         saving = true;
         error = null;
+        var vid = Ctx.Current.Id;
         try
         {
             if (type == "dynamic")
             {
-                await Svc.CreateDynamicAsync(name, TargetGroupScope.Private, criteria);
+                await Svc.CreateDynamicAsync(name, TargetGroupScope.Private, criteria, vid);
             }
             else
             {
@@ -657,9 +665,9 @@
                         .Select(r => TargetGroupService.BrregEnhetToRecipient(r.Enhet!)).ToList()
                     : selectedOrgnrs.Where(o => selectedEnheter.ContainsKey(o))
                         .Select(o => TargetGroupService.BrregEnhetToRecipient(selectedEnheter[o])).ToList();
-                await Svc.CreateStaticAsync(name, TargetGroupScope.Private, recipients);
+                await Svc.CreateStaticAsync(name, TargetGroupScope.Private, recipients, vid);
             }
-            Nav.NavigateTo("/malgrupper");
+            Nav.NavigateTo($"/{Orgnr}/malgrupper");
         }
         catch (Exception ex)
         {

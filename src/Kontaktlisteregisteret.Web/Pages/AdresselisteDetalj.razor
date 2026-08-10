@@ -1,8 +1,9 @@
-@page "/adresselister/{Id:int}"
+@page "/{Orgnr}/adresselister/{Id:int}"
 @inject AdresselisteService Svc
 @inject TargetGroupService TgSvc
 @inject AbonnementslisteService AbSvc
 @inject BrregService Brreg
+@inject VirksomhetContext Ctx
 @inject NavigationManager Nav
 @inject IJSRuntime JS
 
@@ -15,7 +16,7 @@
 else
 {
     <div class="page-header">
-        <a href="/adresselister" class="btn btn-sm">← Tilbake</a>
+        <a href="@($"/{Orgnr}/adresselister")" class="btn btn-sm">← Tilbake</a>
         <h1 style="flex:1">
             @if (redigererTittel)
             {
@@ -323,22 +324,47 @@ else
                     @foreach (var r in PagedMottakere)
                     {
                         var ekskl = ekskluderte.Contains(r.Recipient.ExternalId);
-                        <div class="card-row small" style="@(ekskl ? "opacity:0.45" : "")">
+                        var erAbonnent = r.Recipient.Type == RecipientType.Subscriber;
+                        var erEksp = !erAbonnent && expandedOrg == r.Recipient.ExternalId;
+                        var rowStyle = (ekskl ? "opacity:0.45;" : "") + (!erAbonnent ? "cursor:pointer" : "");
+                        <div class="card-row small @(erEksp ? "expanded" : "")"
+                             style="@rowStyle"
+                             @onclick="() => { if (!erAbonnent) ToggleOrgDetalj(r.Recipient.ExternalId); }">
                             @if (liste.Status != AdresselisteStatus.Låst)
                             {
                                 <input type="checkbox" checked="@(!ekskl)"
                                     style="width:15px;height:15px;flex-shrink:0;cursor:pointer"
+                                    @onclick:stopPropagation="true"
                                     @onchange="() => ToggleEkskludering(r.Recipient.ExternalId)" />
                             }
                             <div class="grow" style="margin-left:6px">
-                                <div class="row-name">@r.VisNavn</div>
+                                <div class="row-name" style="@(erAbonnent ? "font-family:monospace;font-size:.93rem" : "")">
+                                    @r.VisNavn
+                                </div>
                                 <div class="row-sub">
-                                    @if (r.Visningsnavn is not null) { <text>Brreg: @r.Recipient.Name · </text> }
-                                    @r.Recipient.ExternalId · @r.Recipient.OrgForm · @r.Recipient.PostalCity
+                                    @if (!erAbonnent)
+                                    {
+                                        @if (r.Visningsnavn is not null) { <text>Brreg: @r.Recipient.Name · </text> }
+                                        <text>@r.Recipient.ExternalId</text>
+                                        @if (!string.IsNullOrEmpty(r.Recipient.OrgForm)) { <text> · @r.Recipient.OrgForm</text> }
+                                        @if (!string.IsNullOrEmpty(r.Recipient.PostalCity)) { <text> · @r.Recipient.PostalCity</text> }
+                                    }
                                     @if (r.CoAdresse is not null) { <text> · <em>@r.CoAdresse</em></text> }
                                 </div>
                             </div>
+                            @if (erAbonnent)
+                            {
+                                <span class="tag" style="font-size:.7rem">Abonnent</span>
+                            }
+                            else
+                            {
+                                <span class="expand-icon">@(erEksp ? "▲" : "▼")</span>
+                            }
                         </div>
+                        @if (!erAbonnent)
+                        {
+                            <OrgDetalj Orgnr="@r.Recipient.ExternalId" Vis="@erEksp" />
+                        }
                     }
                 </div>
                 @if (TotalPages > 1)
@@ -482,6 +508,7 @@ else
 }
 
 @code {
+    [Parameter] public string Orgnr { get; set; } = "";
     [Parameter] public int Id { get; set; }
 
     Adresseliste? liste;
@@ -524,11 +551,13 @@ else
             ? liste.Mottakere.Count
             : liveMottakere.Count(r => !ekskluderte.Contains(r.Recipient.ExternalId));
 
-    protected override async Task OnInitializedAsync()
+    protected override async Task OnParametersSetAsync()
     {
+        await Ctx.LoadAsync(Orgnr);
+        if (Ctx.Current is null) return;
         await LoadAsync();
-        alleMålgrupper = await TgSvc.GetAllAsync();
-        alleAbonnementslister = await AbSvc.GetAllAsync();
+        alleMålgrupper = await TgSvc.GetAllAsync(Ctx.Current.Id);
+        alleAbonnementslister = await AbSvc.GetAllAsync(Ctx.Current.Id);
     }
 
     async Task LoadAsync()
@@ -609,7 +638,8 @@ else
         await Svc.AddMålgruppeAsync(Id, valgtMålgruppeId);
         valgtMålgruppeId = 0;
         velgerMålgruppe = false;
-        alleMålgrupper = await TgSvc.GetAllAsync();
+        if (Ctx.Current is not null)
+            alleMålgrupper = await TgSvc.GetAllAsync(Ctx.Current.Id);
         await LoadAsync();
     }
 
@@ -640,14 +670,14 @@ else
     {
         if (string.IsNullOrWhiteSpace(adHocNavn)) return;
         lagrerAdHoc = true;
-        var gruppe = await TgSvc.CreateStaticAsync(adHocNavn.Trim(), TargetGroupScope.Private, []);
+        var gruppe = await TgSvc.CreateStaticAsync(adHocNavn.Trim(), TargetGroupScope.Private, [], Ctx.Current?.Id);
         await Svc.AddMålgruppeAsync(Id, gruppe.Id);
         adHocNavn = "";
         visAdHocSkjema = false;
         lagrerAdHoc = false;
-        alleMålgrupper = await TgSvc.GetAllAsync();
+        alleMålgrupper = await TgSvc.GetAllAsync(Ctx.Current!.Id);
         await LoadAsync();
-        Nav.NavigateTo($"/malgrupper/{gruppe.Id}");
+        Nav.NavigateTo($"/{Orgnr}/malgrupper/{gruppe.Id}");
     }
 
     // ── Status og låsing ────────────────────────────────────────────────────

@@ -21,6 +21,8 @@ builder.Services.AddHttpClient<BrregService>(c =>
 builder.Services.AddScoped<TargetGroupService>();
 builder.Services.AddScoped<AdresselisteService>();
 builder.Services.AddScoped<AbonnementslisteService>();
+builder.Services.AddScoped<VirksomhetService>();
+builder.Services.AddScoped<VirksomhetContext>();
 
 var app = builder.Build();
 
@@ -29,7 +31,18 @@ var app = builder.Build();
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    db.Database.EnsureCreated();
+    try
+    {
+        db.Database.EnsureCreated();
+        // Verifiser at nytt skjema (Virksomheter) er på plass
+        await db.Virksomheter.AnyAsync();
+    }
+    catch
+    {
+        // Skjemaet er utdatert (mangler nye kolonner/tabeller) — slett og gjenopprett
+        db.Database.EnsureDeleted();
+        db.Database.EnsureCreated();
+    }
     if (!app.Configuration.GetValue<bool>("SkipSeed"))
         await SeedAsync(db);
 }
@@ -178,6 +191,46 @@ api.MapDelete("/abonnenter/{id:int}", async (int id, AbonnementslisteService svc
     return ok ? Results.NoContent() : Results.NotFound(new { error = "Abonnenten finnes ikke." });
 });
 
+// ── Admin API: virksomheter ──────────────────────────────────────────────────
+// Krever Maskinporten-scope digdir:kontaktliste.admin i produksjon.
+// I PoC er autentisering ikke aktivert.
+
+var adminApi = app.MapGroup("/api/v1/admin");
+
+adminApi.MapGet("/virksomheter", async (VirksomhetService svc) =>
+{
+    var virksomheter = await svc.GetAllAsync();
+    return Results.Ok(virksomheter.Select(v => new
+    {
+        id = v.Id,
+        orgnr = v.Orgnr,
+        navn = v.Navn,
+        status = v.Status.ToString().ToLower(),
+        onboardetAt = v.OnboardetAt,
+        onboardetAv = v.OnboardetAv
+    }));
+});
+
+adminApi.MapPost("/virksomheter", async (VirksomhetOnboardRequest req, VirksomhetService svc) =>
+{
+    var (v, error) = await svc.OnboardAsync(req.Orgnr, req.Navn, req.OnboardetAv);
+    if (error is not null) return Results.Conflict(new { error });
+    return Results.Created($"/api/v1/admin/virksomheter/{v!.Orgnr}", new
+    {
+        id = v.Id,
+        orgnr = v.Orgnr,
+        navn = v.Navn,
+        status = v.Status.ToString().ToLower(),
+        onboardetAt = v.OnboardetAt
+    });
+});
+
+adminApi.MapDelete("/virksomheter/{id:int}", async (int id, VirksomhetService svc) =>
+{
+    var ok = await svc.SlettAsync(id);
+    return ok ? Results.NoContent() : Results.NotFound(new { error = "Virksomheten finnes ikke." });
+});
+
 // ── Web ───────────────────────────────────────────────────────────────────────
 
 if (!app.Environment.IsDevelopment()) app.UseHsts();
@@ -193,7 +246,19 @@ app.Run();
 static async Task SeedAsync(AppDbContext db)
 {
     // Kjør bare én gang
-    if (await db.Adresselister.AnyAsync()) return;
+    if (await db.Virksomheter.AnyAsync()) return;
+
+    // ── Demo-virksomhet: Digitaliseringsdirektoratet ─────────────────────────
+    var digdir = new Virksomhet
+    {
+        Orgnr = "991825827",
+        Navn = "Digitaliseringsdirektoratet",
+        Status = VirksomhetStatus.Aktiv,
+        OnboardetAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+        OnboardetAv = "Seed"
+    };
+    db.Virksomheter.Add(digdir);
+    await db.SaveChangesAsync();
 
     // ── Hjelpefunksjon: legg til Recipient hvis ExternalId ikke finnes ───────
     async Task<Recipient> UpsertRecipient(string externalId, string name, string orgForm)
@@ -213,9 +278,15 @@ static async Task SeedAsync(AppDbContext db)
         return r;
     }
 
-    async Task<TargetGroup> CreateStaticGroup(string name, List<Recipient> recipients)
+    async Task<TargetGroup> CreateStaticGroup(string name, List<Recipient> recipients, int virksomhetId)
     {
-        var g = new TargetGroup { Name = name, Type = TargetGroupType.Static, Scope = TargetGroupScope.Shared };
+        var g = new TargetGroup
+        {
+            Name = name,
+            Type = TargetGroupType.Static,
+            Scope = TargetGroupScope.Shared,
+            VirksomhetId = virksomhetId
+        };
         db.TargetGroups.Add(g);
         await db.SaveChangesAsync();
         foreach (var r in recipients)
@@ -247,7 +318,7 @@ static async Task SeedAsync(AppDbContext db)
     var deptRecipients = new List<Recipient>();
     foreach (var (orgnr, navn) in departementer)
         deptRecipients.Add(await UpsertRecipient(orgnr, navn, "STAT"));
-    var gruppeDept = await CreateStaticGroup("Departementene", deptRecipients);
+    var gruppeDept = await CreateStaticGroup("Departementene", deptRecipients, digdir.Id);
 
     // ── Statsforvaltere ──────────────────────────────────────────────────────
     var statsforvaltere = new (string orgnr, string navn)[]
@@ -266,7 +337,7 @@ static async Task SeedAsync(AppDbContext db)
     var sfRecipients = new List<Recipient>();
     foreach (var (orgnr, navn) in statsforvaltere)
         sfRecipients.Add(await UpsertRecipient(orgnr, navn, "STAT"));
-    var gruppeSF = await CreateStaticGroup("Statsforvaltere", sfRecipients);
+    var gruppeSF = await CreateStaticGroup("Statsforvaltere", sfRecipients, digdir.Id);
 
     // ── Statlige etater og direktorater ─────────────────────────────────────
     var etater = new (string orgnr, string navn)[]
@@ -302,7 +373,7 @@ static async Task SeedAsync(AppDbContext db)
     var etaterRecipients = new List<Recipient>();
     foreach (var (orgnr, navn) in etater)
         etaterRecipients.Add(await UpsertRecipient(orgnr, navn, "STAT"));
-    var gruppeEtater = await CreateStaticGroup("Statlige etater og direktorater", etaterRecipients);
+    var gruppeEtater = await CreateStaticGroup("Statlige etater og direktorater", etaterRecipients, digdir.Id);
 
     // ── Interesseorganisasjoner ──────────────────────────────────────────────
     // Alle orgnr er verifisert mot Brreg Enhetsregisteret API.
@@ -357,7 +428,7 @@ static async Task SeedAsync(AppDbContext db)
         }
         orgerRecipients.Add(existing);
     }
-    var gruppeOrger = await CreateStaticGroup("Interesseorganisasjoner", orgerRecipients);
+    var gruppeOrger = await CreateStaticGroup("Interesseorganisasjoner", orgerRecipients, digdir.Id);
 
     // ── UH-sektor og forskning ───────────────────────────────────────────────
     // Alle orgnr er verifisert mot Brreg Enhetsregisteret API
@@ -379,7 +450,7 @@ static async Task SeedAsync(AppDbContext db)
     var uhRecipients = new List<Recipient>();
     foreach (var (orgnr, navn) in uh)
         uhRecipients.Add(await UpsertRecipient(orgnr, navn, "SF"));
-    var gruppeUH = await CreateStaticGroup("Forskningsmiljøer og UH-sektor", uhRecipients);
+    var gruppeUH = await CreateStaticGroup("Forskningsmiljøer og UH-sektor", uhRecipients, digdir.Id);
 
     // ── Arbeidslivs- og næringsorganisasjoner ───────────────────────────────
     // Alle orgnr er verifisert mot Brreg Enhetsregisteret API
@@ -413,7 +484,7 @@ static async Task SeedAsync(AppDbContext db)
         }
         arbeidRecipients.Add(existing);
     }
-    var gruppeArbeid = await CreateStaticGroup("Arbeidslivs- og næringsorganisasjoner", arbeidRecipients);
+    var gruppeArbeid = await CreateStaticGroup("Arbeidslivs- og næringsorganisasjoner", arbeidRecipients, digdir.Id);
 
     // ── Kommuner-målgruppe: dynamisk gruppe (KOMM, kun aktive) ──────────────
     // Mottakere hentes ikke automatisk ved seed — brukeren synkroniserer
@@ -423,6 +494,7 @@ static async Task SeedAsync(AppDbContext db)
         Name = "Kommuner",
         Type = TargetGroupType.Dynamic,
         Scope = TargetGroupScope.Shared,
+        VirksomhetId = digdir.Id,
         DynamicCriteriaJson = System.Text.Json.JsonSerializer.Serialize(new DynamicCriteria
         {
             OrgForm = "KOMM",
@@ -439,7 +511,8 @@ static async Task SeedAsync(AppDbContext db)
         Beskrivelse = "Barne- og familiedepartementet sender NOU 2026:2 på høring. Høringsfrist: 01.08.2026.",
         OpprettetAv = "Barne- og familiedepartementet",
         Status = AdresselisteStatus.Utkast,
-        OpprettetAt = new DateTime(2026, 4, 22, 0, 0, 0, DateTimeKind.Utc)
+        OpprettetAt = new DateTime(2026, 4, 22, 0, 0, 0, DateTimeKind.Utc),
+        VirksomhetId = digdir.Id
     };
     db.Adresselister.Add(adresseliste);
     await db.SaveChangesAsync();
@@ -489,6 +562,7 @@ static async Task SeedAsync(AppDbContext db)
 }
 
 record AbonnentRegistrerRequest(string Epost);
+record VirksomhetOnboardRequest(string Orgnr, string Navn, string? OnboardetAv = null);
 
 // Eksponerer Program-klassen for WebApplicationFactory i testprosjektet
 public partial class Program { }

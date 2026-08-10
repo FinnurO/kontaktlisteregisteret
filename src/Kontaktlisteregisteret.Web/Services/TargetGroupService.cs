@@ -9,8 +9,17 @@ namespace Kontaktlisteregisteret.Web.Services;
 
 public class TargetGroupService(AppDbContext db, BrregService brreg)
 {
+    /// Henter alle målgrupper uavhengig av virksomhet — brukes av maskin-API.
     public async Task<List<TargetGroup>> GetAllAsync() =>
         await db.TargetGroups
+            .Include(g => g.Members).ThenInclude(m => m.Recipient)
+            .OrderByDescending(g => g.CreatedAt)
+            .ToListAsync();
+
+    /// Henter målgrupper filtrert på virksomhet — brukes av Blazor UI.
+    public async Task<List<TargetGroup>> GetAllAsync(int virksomhetId) =>
+        await db.TargetGroups
+            .Where(g => g.VirksomhetId == virksomhetId)
             .Include(g => g.Members).ThenInclude(m => m.Recipient)
             .OrderByDescending(g => g.CreatedAt)
             .ToListAsync();
@@ -20,14 +29,16 @@ public class TargetGroupService(AppDbContext db, BrregService brreg)
             .Include(g => g.Members).ThenInclude(m => m.Recipient)
             .FirstOrDefaultAsync(g => g.Id == id);
 
-    public async Task<TargetGroup> CreateDynamicAsync(string name, TargetGroupScope scope, DynamicCriteria criteria)
+    public async Task<TargetGroup> CreateDynamicAsync(
+        string name, TargetGroupScope scope, DynamicCriteria criteria, int? virksomhetId = null)
     {
         var group = new TargetGroup
         {
             Name = name,
             Type = TargetGroupType.Dynamic,
             Scope = scope,
-            DynamicCriteriaJson = JsonSerializer.Serialize(criteria)
+            DynamicCriteriaJson = JsonSerializer.Serialize(criteria),
+            VirksomhetId = virksomhetId
         };
         db.TargetGroups.Add(group);
         await db.SaveChangesAsync();
@@ -35,13 +46,15 @@ public class TargetGroupService(AppDbContext db, BrregService brreg)
         return group;
     }
 
-    public async Task<TargetGroup> CreateStaticAsync(string name, TargetGroupScope scope, List<Recipient> recipients)
+    public async Task<TargetGroup> CreateStaticAsync(
+        string name, TargetGroupScope scope, List<Recipient> recipients, int? virksomhetId = null)
     {
         var group = new TargetGroup
         {
             Name = name,
             Type = TargetGroupType.Static,
-            Scope = scope
+            Scope = scope,
+            VirksomhetId = virksomhetId
         };
         db.TargetGroups.Add(group);
         await db.SaveChangesAsync();
@@ -57,7 +70,8 @@ public class TargetGroupService(AppDbContext db, BrregService brreg)
             Name = original.Name + " (kopi)",
             Type = original.Type,
             Scope = original.Scope,
-            DynamicCriteriaJson = original.DynamicCriteriaJson
+            DynamicCriteriaJson = original.DynamicCriteriaJson,
+            VirksomhetId = original.VirksomhetId   // behold tenant-tilknytning
         };
         db.TargetGroups.Add(kopi);
         await db.SaveChangesAsync();
@@ -75,6 +89,14 @@ public class TargetGroupService(AppDbContext db, BrregService brreg)
             await db.SaveChangesAsync();
         }
         return kopi;
+    }
+
+    public async Task UpdateNameAsync(int id, string name)
+    {
+        var group = await db.TargetGroups.FindAsync(id);
+        if (group is null) return;
+        group.Name = name.Trim();
+        await db.SaveChangesAsync();
     }
 
     public async Task DeleteAsync(int id)

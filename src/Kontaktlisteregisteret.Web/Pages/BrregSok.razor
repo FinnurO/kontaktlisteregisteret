@@ -7,6 +7,17 @@
     <h1>Brreg-søk</h1>
 </div>
 
+@* ── Fanebytte ─────────────────────────────────────────────────────────── *@
+<div style="display:flex;gap:4px;margin-bottom:1.25rem;border-bottom:1px solid var(--gray-200)">
+    <button class="btn btn-sm @(fane == "enkelt" ? "btn-primary" : "")" style="border-radius:var(--radius-sm) var(--radius-sm) 0 0;border-bottom:none"
+        @onclick='() => fane = "enkelt"'>Enkeltoppslag</button>
+    <button class="btn btn-sm @(fane == "masse" ? "btn-primary" : "")" style="border-radius:var(--radius-sm) var(--radius-sm) 0 0;border-bottom:none"
+        @onclick='() => fane = "masse"'>Navneoppslag (lim inn liste)</button>
+</div>
+
+@if (fane == "enkelt")
+{
+
 <div class="search-bar">
     <input class="form-input" @bind="query" @bind:event="oninput"
         @onkeydown="OnKey" placeholder="Søk på navn eller organisasjonsnummer..." />
@@ -171,13 +182,133 @@ else if (searched && !loading)
     }
 }
 
+} @* slutt enkelt-fane *@
+else
+{
+    @* ── Navneoppslag ────────────────────────────────────────────────────── *@
+    <p style="color:var(--text-muted);margin-bottom:.75rem;font-size:.9rem">
+        Lim inn én virksomhet per linje. For hvert navn søkes det i Brreg og første treff vises.
+    </p>
+    <div style="display:flex;gap:.75rem;align-items:flex-start;flex-wrap:wrap;margin-bottom:1rem">
+        <textarea class="form-input" rows="8"
+            style="flex:1;min-width:260px;font-family:monospace;font-size:.88rem;resize:vertical"
+            placeholder="Digitaliseringsdirektoratet&#10;Riksrevisjonen&#10;Skatteetaten"
+            @bind="masseInput" @bind:event="oninput"></textarea>
+        <div style="display:flex;flex-direction:column;gap:.5rem;min-width:140px">
+            <button class="btn btn-primary" @onclick="SlåOppNavnAsync"
+                disabled="@(masseLoading || string.IsNullOrWhiteSpace(masseInput))">
+                @(masseLoading ? "Slår opp…" : "Slå opp")
+            </button>
+            @if (masseResultater.Any())
+            {
+                <button class="btn btn-sm" @onclick="() => masseResultater.Clear()">Tøm</button>
+                <div class="muted" style="font-size:.8rem">
+                    @masseResultater.Count(r => r.Enhet is not null) av @masseResultater.Count funnet
+                </div>
+            }
+        </div>
+    </div>
+
+    @if (masseLoading && masseResultater.Any())
+    {
+        <div class="muted" style="margin-bottom:.5rem;font-size:.85rem">
+            Slår opp @masseProgressIdx av @masseTotalt…
+        </div>
+    }
+
+    @if (masseResultater.Any())
+    {
+        <div class="card">
+            <div class="card-row small" style="font-weight:600;font-size:.8rem;color:var(--text-muted);background:var(--gray-50);cursor:default">
+                <div class="grow" style="display:grid;grid-template-columns:1fr 1fr auto;gap:.5rem;width:100%">
+                    <span>Søkenavn</span>
+                    <span>Brreg-navn</span>
+                    <span>Orgnr</span>
+                </div>
+            </div>
+            @foreach (var r in masseResultater)
+            {
+                <div class="card-row small" style="@(r.Enhet is null ? "opacity:.55" : "")">
+                    <div class="grow" style="display:grid;grid-template-columns:1fr 1fr auto;gap:.5rem;width:100%;align-items:center">
+                        <span style="font-size:.88rem">@r.Søkenavn</span>
+                        @if (r.Enhet is not null)
+                        {
+                            <span style="font-size:.88rem">
+                                @r.Enhet.navn
+                                @if (!r.Enhet.ErAktiv)
+                                { <span class="tag tag-error" style="font-size:.7rem;margin-left:.3rem">Inaktiv</span> }
+                                @if (!string.IsNullOrEmpty(r.Enhet.organisasjonsform?.kode))
+                                { <span class="muted" style="font-size:.75rem"> · @r.Enhet.organisasjonsform!.kode</span> }
+                            </span>
+                            <span style="font-family:monospace;font-size:.88rem;white-space:nowrap">@r.Enhet.organisasjonsnummer</span>
+                        }
+                        else if (r.Laster)
+                        {
+                            <span class="muted" style="font-size:.85rem">Søker…</span>
+                            <span></span>
+                        }
+                        else
+                        {
+                            <span class="muted" style="font-size:.85rem;font-style:italic">Ikke funnet</span>
+                            <span></span>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+    }
+}
+
 @code {
+    string fane = "enkelt";
+
+    // Enkeltoppslag
     string query = "";
     string aktivitetFilter = "";
     string? error;
     bool loading, searched;
     List<BrregEnhet> results = [];
     string? expanded;
+
+    // Navneoppslag
+    string masseInput = "";
+    bool masseLoading;
+    int masseProgressIdx, masseTotalt;
+    List<NavneOppslagRad> masseResultater = [];
+
+    record NavneOppslagRad(string Søkenavn)
+    {
+        public BrregEnhet? Enhet { get; set; }
+        public bool Laster { get; set; } = true;
+    }
+
+    async Task SlåOppNavnAsync()
+    {
+        var linjer = masseInput
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(l => !string.IsNullOrWhiteSpace(l))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (!linjer.Any()) return;
+
+        masseLoading = true;
+        masseProgressIdx = 0;
+        masseTotalt = linjer.Count;
+        masseResultater = linjer.Select(l => new NavneOppslagRad(l)).ToList();
+
+        for (int i = 0; i < masseResultater.Count; i++)
+        {
+            masseProgressIdx = i + 1;
+            var rad = masseResultater[i];
+            var treff = await Brreg.SearchAsync(rad.Søkenavn, size: 1);
+            rad.Enhet = treff.FirstOrDefault();
+            rad.Laster = false;
+            StateHasChanged();
+        }
+
+        masseLoading = false;
+    }
 
     List<BrregEnhet> Filtered => string.IsNullOrWhiteSpace(aktivitetFilter) ? results
         : results.Where(e => e.aktivitet?.Any(a =>

@@ -1,0 +1,139 @@
+@page "/admin/virksomheter"
+@inject VirksomhetService Svc
+@inject NavigationManager Nav
+
+<PageTitle>Virksomheter — Admin</PageTitle>
+
+<div class="page-header">
+    <h1>Virksomheter</h1>
+    <button class="btn btn-primary" @onclick="() => visSkjema = !visSkjema">
+        @(visSkjema ? "Avbryt" : "+ Onboard virksomhet")
+    </button>
+</div>
+
+<p style="color:var(--text-muted);margin-bottom:1.5rem">
+    Virksomheter som er onboardet her får tilgang til Kontaktlisteregisteret.
+    I produksjon beskyttes dette endepunktet av Maskinporten-scope
+    <code>digdir:kontaktliste.admin</code>.
+</p>
+
+@* ── Onboard-skjema ────────────────────────────────────────────────────── *@
+@if (visSkjema)
+{
+    <div class="card" style="margin-bottom:1.5rem;padding:1.25rem;max-width:560px">
+        <h3 style="margin:0 0 1rem">Onboard ny virksomhet</h3>
+        <div style="display:grid;gap:.75rem">
+            <div>
+                <label class="form-label">Organisasjonsnummer <span style="color:var(--danger)">*</span></label>
+                <input class="form-input" type="text" maxlength="9" placeholder="991825827"
+                       @bind="nyttOrgnr" @bind:event="oninput" style="max-width:180px;font-family:monospace" />
+            </div>
+            <div>
+                <label class="form-label">Virksomhetsnavn <span style="color:var(--danger)">*</span></label>
+                <input class="form-input" type="text" placeholder="f.eks. Digitaliseringsdirektoratet"
+                       @bind="nyttNavn" @bind:event="oninput" />
+            </div>
+            @if (!string.IsNullOrEmpty(skjemaFeil))
+            {
+                <div class="form-error">@skjemaFeil</div>
+            }
+            <div>
+                <button class="btn btn-primary" @onclick="OnboardAsync"
+                        disabled="@(string.IsNullOrWhiteSpace(nyttOrgnr) || string.IsNullOrWhiteSpace(nyttNavn) || lagrer)">
+                    @(lagrer ? "Registrerer…" : "Onboard virksomhet")
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@* ── Liste ─────────────────────────────────────────────────────────────── *@
+@if (loading)
+{
+    <div class="loading">Laster...</div>
+}
+else if (!virksomheter.Any())
+{
+    <div class="empty-state">
+        Ingen virksomheter er onboardet ennå.
+    </div>
+}
+else
+{
+    <div class="card">
+        @foreach (var v in virksomheter)
+        {
+            <div class="card-row">
+                <div class="grow">
+                    <div class="row-name">@v.Navn</div>
+                    <div class="row-sub">
+                        <span style="font-family:monospace">@v.Orgnr</span>
+                        · Onboardet @v.OnboardetAt.ToString("dd. MMM yyyy")
+                        @if (!string.IsNullOrEmpty(v.OnboardetAv))
+                        { <text> av @v.OnboardetAv</text> }
+                    </div>
+                </div>
+                <span class="tag @(v.Status == VirksomhetStatus.Aktiv ? "tag-dynamic" : "tag-error")">
+                    @v.Status
+                </span>
+                @if (v.Status == VirksomhetStatus.Aktiv)
+                {
+                    <button class="btn btn-sm btn-danger"
+                        @onclick="() => ToggleStatusAsync(v, VirksomhetStatus.Inaktiv)">
+                        Deaktiver
+                    </button>
+                }
+                else
+                {
+                    <button class="btn btn-sm"
+                        @onclick="() => ToggleStatusAsync(v, VirksomhetStatus.Aktiv)">
+                        Aktiver
+                    </button>
+                }
+                <a href="@($"/{v.Orgnr}/adresselister")" class="btn btn-sm btn-primary">Åpne →</a>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    List<Virksomhet> virksomheter = [];
+    bool loading = true;
+    bool visSkjema;
+    string nyttOrgnr = string.Empty;
+    string nyttNavn = string.Empty;
+    string skjemaFeil = string.Empty;
+    bool lagrer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        virksomheter = await Svc.GetAllAsync();
+        loading = false;
+    }
+
+    async Task OnboardAsync()
+    {
+        lagrer = true;
+        skjemaFeil = string.Empty;
+
+        var (v, error) = await Svc.OnboardAsync(nyttOrgnr, nyttNavn, onboardetAv: "Admin (PoC)");
+        if (error is not null)
+        {
+            skjemaFeil = error;
+            lagrer = false;
+            return;
+        }
+
+        nyttOrgnr = string.Empty;
+        nyttNavn = string.Empty;
+        visSkjema = false;
+        lagrer = false;
+        virksomheter = await Svc.GetAllAsync();
+    }
+
+    async Task ToggleStatusAsync(Virksomhet v, VirksomhetStatus nyStatus)
+    {
+        await Svc.SetStatusAsync(v.Id, nyStatus);
+        virksomheter = await Svc.GetAllAsync();
+    }
+}
