@@ -268,6 +268,21 @@ textarea.form-input { resize: vertical; }
 
 .expand-icon { font-size: 11px; color: var(--gray-600); }
 
+.pagination {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+  font-size: 13px;
+}
+
+.hierarchy-node { margin-bottom: 4px; }
+.hierarchy-parent { cursor: pointer; background: var(--gray-50); font-weight: 500; }
+.hierarchy-parent:hover { background: var(--blue-50); }
+.hierarchy-child { border-left: 2px solid var(--blue-200); margin-left: 8px; background: white; }
+
+.section-label { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--gray-600); }
+
 .code-block {
   display: block;
   background: var(--gray-100);

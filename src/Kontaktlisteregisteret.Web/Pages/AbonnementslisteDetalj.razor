@@ -1,0 +1,194 @@
+@page "/abonnenter/{Id:int}"
+@inject AbonnementslisteService Svc
+@inject NavigationManager Nav
+
+<PageTitle>@(liste?.Navn ?? "Abonnementsliste") — Kontaktlisteregisteret</PageTitle>
+
+@if (liste is null)
+{
+    <div class="empty-state">Laster…</div>
+}
+else
+{
+    <div class="page-header">
+        <div>
+            <a href="/abonnenter" class="back-link">← Abonnementslister</a>
+            <h1>@liste.Navn</h1>
+        </div>
+        <span class="tag">@liste.Abonnenter.Count abonnenter</span>
+    </div>
+
+    @* ── Metadata ──────────────────────────────────────────────────────────── *@
+    <div class="card" style="margin-bottom:1.5rem;padding:1rem 1.25rem">
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:.5rem 2rem;font-size:.88rem">
+            <div>
+                <span style="color:var(--text-muted)">Opprettet</span><br/>
+                <strong>@liste.OpprettetAt.ToLocalTime().ToString("dd. MMMM yyyy HH:mm")</strong>
+            </div>
+            @if (!string.IsNullOrEmpty(liste.OpprettetAv))
+            {
+                <div>
+                    <span style="color:var(--text-muted)">Opprettet av</span><br/>
+                    <strong>@liste.OpprettetAv</strong>
+                </div>
+            }
+            @if (!string.IsNullOrEmpty(liste.Beskrivelse))
+            {
+                <div style="grid-column:1/-1">
+                    <span style="color:var(--text-muted)">Beskrivelse</span><br/>
+                    <span>@liste.Beskrivelse</span>
+                </div>
+            }
+        </div>
+
+        @* ── Rediger ─────────────────────────────────────────────────────── *@
+        @if (redigerer)
+        {
+            <div style="margin-top:1rem;display:grid;gap:.6rem;max-width:480px">
+                <input class="form-input" type="text" @bind="redigerNavn" placeholder="Navn" />
+                <textarea class="form-input" rows="2" @bind="redigerBeskrivelse"
+                          placeholder="Beskrivelse (valgfri)" style="resize:vertical"></textarea>
+                @if (!string.IsNullOrEmpty(redigerFeil))
+                {
+                    <div class="form-error">@redigerFeil</div>
+                }
+                <div style="display:flex;gap:.5rem">
+                    <button class="btn btn-primary btn-sm" @onclick="LagreRedigeringAsync">Lagre</button>
+                    <button class="btn btn-sm" @onclick="() => redigerer = false">Avbryt</button>
+                </div>
+            </div>
+        }
+        else
+        {
+            <div style="margin-top:.75rem;display:flex;gap:.5rem">
+                <button class="btn btn-sm" @onclick="StartRedigering">✎ Rediger</button>
+                <button class="btn btn-sm btn-danger" @onclick="SlettListeAsync">Slett liste</button>
+            </div>
+        }
+    </div>
+
+    @* ── Legg til abonnent ────────────────────────────────────────────────── *@
+    <div class="card" style="margin-bottom:1.5rem;padding:1rem 1.25rem">
+        <div style="display:flex;gap:.75rem;align-items:flex-start">
+            <div style="flex:1">
+                <input class="form-input" type="email" placeholder="epost@eksempel.no"
+                       @bind="nyEpost" @bind:event="oninput"
+                       @onkeydown="TastNed"
+                       style="width:100%" />
+                @if (!string.IsNullOrEmpty(leggTilFeil))
+                {
+                    <div class="form-error" style="margin-top:.4rem">@leggTilFeil</div>
+                }
+            </div>
+            <button class="btn btn-primary" @onclick="LeggTilAsync"
+                    disabled="@(string.IsNullOrWhiteSpace(nyEpost) || lagrer)">
+                @(lagrer ? "Lagrer…" : "+ Legg til")
+            </button>
+        </div>
+    </div>
+
+    @* ── Abonnentliste ────────────────────────────────────────────────────── *@
+    @if (!liste.Abonnenter.Any())
+    {
+        <div class="empty-state">Ingen abonnenter ennå. Legg til den første ovenfor.</div>
+    }
+    else
+    {
+        <div class="card">
+            @foreach (var a in liste.Abonnenter.OrderBy(x => x.Epost))
+            {
+                <div class="card-row">
+                    <div class="grow">
+                        <div class="row-name" style="font-family:monospace;font-size:.95rem">@a.Epost</div>
+                        <div class="row-sub">
+                            Lagt til @a.LagtTilAt.ToLocalTime().ToString("dd. MMM yyyy HH:mm")
+                            · <span class="tag @KildeTagClass(a.Kilde)"
+                                    style="font-size:.7rem;padding:.1rem .4rem">@a.Kilde</span>
+                        </div>
+                    </div>
+                    <button class="btn btn-sm btn-danger" @onclick="() => SlettAbonnentAsync(a.Id)">Slett</button>
+                </div>
+            }
+        </div>
+    }
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    Abonnementsliste? liste;
+
+    // Legg til
+    string nyEpost = string.Empty;
+    string leggTilFeil = string.Empty;
+    bool lagrer;
+
+    // Rediger liste-metadata
+    bool redigerer;
+    string redigerNavn = string.Empty;
+    string redigerBeskrivelse = string.Empty;
+    string redigerFeil = string.Empty;
+
+    protected override async Task OnInitializedAsync() =>
+        liste = await Svc.GetAsync(Id);
+
+    async Task TastNed(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await LeggTilAsync();
+    }
+
+    async Task LeggTilAsync()
+    {
+        if (string.IsNullOrWhiteSpace(nyEpost)) return;
+        lagrer = true;
+        leggTilFeil = string.Empty;
+
+        var (ok, error, _) = await Svc.LeggTilAsync(Id, nyEpost);
+        if (ok)
+        {
+            nyEpost = string.Empty;
+            liste = await Svc.GetAsync(Id);
+        }
+        else
+        {
+            leggTilFeil = error ?? "Ukjent feil.";
+        }
+
+        lagrer = false;
+    }
+
+    async Task SlettAbonnentAsync(int abonnentId)
+    {
+        await Svc.SlettAbonnentAsync(abonnentId);
+        liste = await Svc.GetAsync(Id);
+    }
+
+    void StartRedigering()
+    {
+        redigerNavn = liste!.Navn;
+        redigerBeskrivelse = liste.Beskrivelse ?? string.Empty;
+        redigerFeil = string.Empty;
+        redigerer = true;
+    }
+
+    async Task LagreRedigeringAsync()
+    {
+        if (string.IsNullOrWhiteSpace(redigerNavn))
+        {
+            redigerFeil = "Navn er påkrevd.";
+            return;
+        }
+        await Svc.OppdaterAsync(Id, redigerNavn, redigerBeskrivelse);
+        liste = await Svc.GetAsync(Id);
+        redigerer = false;
+    }
+
+    async Task SlettListeAsync()
+    {
+        await Svc.SlettListeAsync(Id);
+        Nav.NavigateTo("/abonnenter");
+    }
+
+    static string KildeTagClass(AbonnentKilde k) =>
+        k == AbonnentKilde.Api ? "tag-dynamic" : string.Empty;
+}

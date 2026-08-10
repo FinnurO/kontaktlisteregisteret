@@ -17,9 +17,31 @@
 
 @if (results.Any())
 {
-    <div class="muted" style="margin-bottom:8px">@results.Count treff</div>
+    <div style="margin-bottom:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <input class="form-input" style="max-width:220px" list="aktivitet-list-sok"
+            @bind="aktivitetFilter" @bind:event="oninput"
+            placeholder="Filtrer på aktivitet..." />
+        <datalist id="aktivitet-list-sok">
+            <option value="Skole" /><option value="Barnehage" /><option value="Sykehjem" />
+            <option value="Helsestasjon" /><option value="Bibliotek" /><option value="Kulturhus" />
+            <option value="Idrettshall" /><option value="Svømmehall" /><option value="Brannstasjon" />
+            <option value="Vannverk" /><option value="NAV" /><option value="Avfallshåndtering" />
+        </datalist>
+        <span class="muted">@Filtered.Count av @results.Count treff</span>
+    </div>
+}
+
+@if (error is not null)
+{
+    <div class="alert-error" style="margin-bottom:12px">
+        <strong>Feil fra Brreg:</strong> @error
+    </div>
+}
+
+@if (Filtered.Any())
+{
     <div class="card">
-        @foreach (var e in results)
+        @foreach (var e in Filtered)
         {
             <div class="card-row @(expanded == e.organisasjonsnummer ? "expanded" : "")"
                 @onclick="() => ToggleExpand(e.organisasjonsnummer)">
@@ -29,12 +51,15 @@
                         @e.organisasjonsnummer
                         @if (e.organisasjonsform is not null) { <text> · @e.organisasjonsform.kode</text> }
                         @if (e.naeringskode1 is not null) { <text> · @e.naeringskode1.kode @e.naeringskode1.beskrivelse</text> }
-                        @if (!string.IsNullOrEmpty(e.postadresse?.poststed)) { <text> · @e.postadresse!.poststed</text> }
+                        @if (!string.IsNullOrEmpty(e.postadresse?.poststed ?? e.forretningsadresse?.poststed))
+                        {
+                            <text> · @(e.postadresse?.poststed ?? e.forretningsadresse?.poststed)</text>
+                        }
                     </div>
                 </div>
-                @if (e.slettedato is not null)
+                @if (!e.ErAktiv)
                 {
-                    <span class="tag tag-error">Slettet</span>
+                    <span class="tag tag-error">@(e.konkurs == true ? "Konkurs" : e.underAvvikling == true ? "Under avvikling" : "Slettet")</span>
                 }
                 <span class="expand-icon">@(expanded == e.organisasjonsnummer ? "▲" : "▼")</span>
             </div>
@@ -42,32 +67,74 @@
             {
                 <div class="expand-body">
                     <div class="detail-grid">
-                        <div><span class="detail-label">Orgnr</span><span>@e.organisasjonsnummer</span></div>
-                        <div><span class="detail-label">Organisasjonsform</span><span>@e.organisasjonsform?.kode – @e.organisasjonsform?.beskrivelse</span></div>
-                        <div><span class="detail-label">Næringskode</span><span>@e.naeringskode1?.kode @e.naeringskode1?.beskrivelse</span></div>
-                        <div><span class="detail-label">Ansatte</span><span>@(e.antallAnsatte?.ToString() ?? "–")</span></div>
-                        @if (e.postadresse is not null)
+                        <div><span class="detail-label">Organisasjonsnummer</span>@e.organisasjonsnummer</div>
+                        <div><span class="detail-label">Organisasjonsform</span>@(e.organisasjonsform is not null ? $"{e.organisasjonsform.kode} – {e.organisasjonsform.beskrivelse}" : "–")</div>
+                        @if (!string.IsNullOrEmpty(e.AktivitetDisplay))
                         {
-                            <div><span class="detail-label">Postadresse</span><span>@e.DisplayAddress</span></div>
+                            <div><span class="detail-label">Aktivitet</span>@e.AktivitetDisplay</div>
+                        }
+                        <div><span class="detail-label">Næringskode</span>@(e.naeringskode1 is not null ? $"{e.naeringskode1.kode} {e.naeringskode1.beskrivelse}" : "–")</div>
+                        @if (e.naeringskode2 is not null)
+                        {
+                            <div><span class="detail-label">Næringskode 2</span>@e.naeringskode2.kode @e.naeringskode2.beskrivelse</div>
+                        }
+                        @if (e.naeringskode3 is not null)
+                        {
+                            <div><span class="detail-label">Næringskode 3</span>@e.naeringskode3.kode @e.naeringskode3.beskrivelse</div>
+                        }
+                        <div><span class="detail-label">Institusjonell sektorkode</span>@(e.institusjonellSektorkode is not null ? $"{e.institusjonellSektorkode.kode} {e.institusjonellSektorkode.beskrivelse}" : "–")</div>
+                        <div><span class="detail-label">Ansatte</span>@(e.antallAnsatte?.ToString() ?? "–")</div>
+                        @if (!string.IsNullOrEmpty(e.registreringsdatoEnhetsregisteret))
+                        {
+                            <div><span class="detail-label">Registrert i Enhetsregisteret</span>@FormatDato(e.registreringsdatoEnhetsregisteret)</div>
+                        }
+                        @if (!string.IsNullOrEmpty(e.stiftelsesdato))
+                        {
+                            <div><span class="detail-label">Stiftelsesdato</span>@FormatDato(e.stiftelsesdato)</div>
+                        }
+                        <div><span class="detail-label">Status</span>@(e.ErAktiv ? "Aktiv" : e.konkurs == true ? "Konkurs" : e.underAvvikling == true ? "Under avvikling" : $"Slettet {e.slettedato}")</div>
+                        @if (!string.IsNullOrEmpty(e.DisplayAddress))
+                        {
+                            <div><span class="detail-label">Postadresse</span>@e.DisplayAddress</div>
+                        }
+                        @if (e.forretningsadresse is not null && !string.IsNullOrEmpty(e.forretningsadresse.poststed))
+                        {
+                            <div><span class="detail-label">Forretningsadresse</span>
+                                @(string.Join(", ", e.forretningsadresse.adresse ?? [])), @e.forretningsadresse.postnummer @e.forretningsadresse.poststed
+                            </div>
                         }
                         @if (e.overordnetEnhet is not null)
                         {
-                            <div><span class="detail-label">Overordnet enhet</span><span>@e.overordnetEnhet.navn (@e.overordnetEnhet.organisasjonsnummer)</span></div>
+                            <div><span class="detail-label">Overordnet enhet</span>@e.overordnetEnhet</div>
                         }
                     </div>
-                    @if (children.ContainsKey(e.organisasjonsnummer))
+
+                    @if (childrenLoading.Contains(e.organisasjonsnummer))
+                    {
+                        <div class="loading" style="margin-top:8px">Henter underenheter...</div>
+                    }
+                    else if (children.TryGetValue(e.organisasjonsnummer, out var ch))
                     {
                         <div style="margin-top:10px">
-                            <div class="section-label">Underliggende enheter (@children[e.organisasjonsnummer].Count)</div>
-                            @if (children[e.organisasjonsnummer].Any())
+                            <div class="section-label">Underliggende enheter (@ch.Count)</div>
+                            @if (childrenErrors.TryGetValue(e.organisasjonsnummer, out var chErr) && chErr is not null)
+                            {
+                                <div class="alert-error" style="margin-top:4px">@chErr</div>
+                            }
+                            @if (ch.Any())
                             {
                                 <div class="card" style="margin-top:6px">
-                                    @foreach (var c in children[e.organisasjonsnummer])
+                                    @foreach (var c in ch)
                                     {
                                         <div class="card-row small">
                                             <div class="grow">
                                                 <div class="row-name">@c.navn</div>
-                                                <div class="row-sub">@c.organisasjonsnummer · @c.organisasjonsform?.kode</div>
+                                                <div class="row-sub">
+                                                    @c.organisasjonsnummer · @c.organisasjonsform?.kode
+                                                    @if (c.naeringskode1 is not null) { <text> · @c.naeringskode1.beskrivelse</text> }
+                                                    @if (!string.IsNullOrEmpty(c.forretningsadresse?.poststed)) { <text> · @c.forretningsadresse!.poststed</text> }
+                                                    @if (!c.ErAktiv) { <text> · <em>inaktiv</em></text> }
+                                                </div>
                                             </div>
                                         </div>
                                     }
@@ -75,13 +142,14 @@
                             }
                             else
                             {
-                                <div class="muted">Ingen underliggende enheter funnet.</div>
+                                <div class="muted" style="margin-top:4px">Ingen underliggende enheter funnet.</div>
                             }
                         </div>
                     }
                     else
                     {
                         <button class="btn btn-sm" style="margin-top:8px"
+                            @onclick:stopPropagation="true"
                             @onclick="() => LoadChildrenAsync(e.organisasjonsnummer)">
                             Vis underliggende enheter
                         </button>
@@ -93,22 +161,39 @@
 }
 else if (searched && !loading)
 {
-    <div class="empty-state">Ingen treff på «@query».</div>
+    @if (!string.IsNullOrWhiteSpace(aktivitetFilter) && results.Any())
+    {
+        <div class="empty-state">Ingen treff med aktivitet «@aktivitetFilter» blant @results.Count resultater. Prøv et bredere søk, f.eks. kommunenavn.</div>
+    }
+    else
+    {
+        <div class="empty-state">Ingen treff på «@query».</div>
+    }
 }
 
 @code {
     string query = "";
+    string aktivitetFilter = "";
+    string? error;
     bool loading, searched;
     List<BrregEnhet> results = [];
     string? expanded;
+
+    List<BrregEnhet> Filtered => string.IsNullOrWhiteSpace(aktivitetFilter) ? results
+        : results.Where(e => e.aktivitet?.Any(a =>
+            a.Contains(aktivitetFilter, StringComparison.OrdinalIgnoreCase)) == true).ToList();
     Dictionary<string, List<BrregEnhet>> children = [];
+    Dictionary<string, string?> childrenErrors = [];
+    HashSet<string> childrenLoading = [];
 
     async Task SearchAsync()
     {
         if (string.IsNullOrWhiteSpace(query)) return;
         loading = true;
         searched = false;
-        results = await Brreg.SearchAsync(query);
+        error = null;
+        results = await Brreg.SearchAsync(query, size: 200);
+        error = Brreg.LastError;
         loading = false;
         searched = true;
         expanded = null;
@@ -122,9 +207,15 @@ else if (searched && !loading)
     void ToggleExpand(string orgnr) =>
         expanded = expanded == orgnr ? null : orgnr;
 
+    static string FormatDato(string? iso) =>
+        DateTime.TryParse(iso, out var d) ? d.ToString("d. MMMM yyyy", new System.Globalization.CultureInfo("nb-NO")) : iso ?? "";
+
     async Task LoadChildrenAsync(string orgnr)
     {
+        childrenLoading.Add(orgnr);
         var ch = await Brreg.GetChildrenAsync(orgnr);
+        childrenErrors[orgnr] = Brreg.LastError;
         children[orgnr] = ch;
+        childrenLoading.Remove(orgnr);
     }
 }

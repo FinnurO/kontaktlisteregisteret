@@ -25,7 +25,8 @@ else
     <div class="card">
         @foreach (var g in groups)
         {
-            <div class="card-row" @onclick="() => Nav.NavigateTo($"malgrupper/{g.Id}")">
+            var url = "malgrupper/" + g.Id;
+            <div class="card-row" @onclick="() => Nav.NavigateTo(url)">
                 <div class="grow">
                     <div class="row-name">@g.Name</div>
                     <div class="row-sub">
@@ -35,6 +36,8 @@ else
                     </div>
                 </div>
                 <span class="tag @TagClass(g.Type)">@TypeLabel(g.Type)</span>
+                <button class="btn btn-sm" @onclick:stopPropagation="true"
+                    @onclick="() => KopierAsync(g.Id)">⎘ Kopier</button>
                 <button class="btn btn-sm btn-danger" @onclick:stopPropagation="true"
                     @onclick="() => DeleteAsync(g.Id)">Slett</button>
             </div>
@@ -50,6 +53,12 @@ else
     {
         groups = await Svc.GetAllAsync();
         loading = false;
+    }
+
+    async Task KopierAsync(int id)
+    {
+        var kopi = await Svc.KopierAsync(id);
+        Nav.NavigateTo($"/malgrupper/{kopi.Id}");
     }
 
     async Task DeleteAsync(int id)

@@ -1,0 +1,736 @@
+@page "/adresselister/{Id:int}"
+@inject AdresselisteService Svc
+@inject TargetGroupService TgSvc
+@inject AbonnementslisteService AbSvc
+@inject BrregService Brreg
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+
+<PageTitle>@(liste?.Tittel ?? "Adresseliste") — Kontaktlisteregisteret</PageTitle>
+
+@if (liste is null)
+{
+    <div class="loading">Laster...</div>
+}
+else
+{
+    <div class="page-header">
+        <a href="adresselister" class="btn btn-sm">← Tilbake</a>
+        <h1 style="flex:1">
+            @if (redigererTittel)
+            {
+                <input class="form-input" style="font-size:inherit;font-weight:inherit;width:100%"
+                    @bind="editTittel" @onkeydown="@(async e => { if (e.Key=="Enter") await LagreTittelAsync(); if (e.Key=="Escape") AvbrytTittel(); })" />
+            }
+            else
+            {
+                <span>@liste.Tittel</span>
+            }
+        </h1>
+        <div style="display:flex;gap:8px">
+            @if (redigererTittel)
+            {
+                <button class="btn btn-sm btn-primary" @onclick="LagreTittelAsync">Lagre</button>
+                <button class="btn btn-sm" @onclick="AvbrytTittel">Avbryt</button>
+            }
+            else if (liste.Status == AdresselisteStatus.Låst)
+            {
+                <button class="btn" @onclick="ExportJsonAsync">↓ JSON</button>
+                <button class="btn" @onclick="ExportCsvAsync">↓ CSV</button>
+            }
+        </div>
+    </div>
+
+    <div class="detail-meta">
+        <span class="tag @StatusTagClass(liste.Status)">@StatusLabel(liste.Status)</span>
+        <span class="muted">@AntallMottakere mottakere</span>
+        @if (liste.LåstAt.HasValue)
+        { <span class="muted">Låst @liste.LåstAt.Value.ToString("dd. MMMM yyyy HH:mm")</span> }
+        else
+        { <span class="muted">Opprettet @liste.OpprettetAt.ToString("dd. MMMM yyyy")</span> }
+        @if (!string.IsNullOrEmpty(liste.OpprettetAv))
+        { <span class="muted">av @liste.OpprettetAv</span> }
+    </div>
+
+    @* ── Beskrivelse ──────────────────────────────────────────────────────── *@
+    @if (liste.Status != AdresselisteStatus.Låst || !string.IsNullOrEmpty(liste.Beskrivelse))
+    {
+        <div style="margin-bottom:16px;padding:12px 14px;background:#fff;border:0.5px solid var(--gray-200);border-radius:var(--radius-md)">
+            @if (redigererBeskrivelse)
+            {
+                <textarea class="form-input" rows="3" @bind="editBeskrivelse" style="width:100%;margin-bottom:8px"></textarea>
+                <div style="display:flex;gap:8px">
+                    <button class="btn btn-sm btn-primary" @onclick="LagreBeskrivelseAsync">Lagre</button>
+                    <button class="btn btn-sm" @onclick="() => redigererBeskrivelse = false">Avbryt</button>
+                </div>
+            }
+            else
+            {
+                <div style="color:var(--gray-600);font-size:13px;min-height:20px">
+                    @if (string.IsNullOrEmpty(liste.Beskrivelse))
+                    { <span class="muted" style="font-style:italic">Ingen beskrivelse — klikk for å legge til</span> }
+                    else
+                    { @liste.Beskrivelse }
+                </div>
+                @if (liste.Status != AdresselisteStatus.Låst)
+                {
+                    <div style="display:flex;gap:.5rem;margin-top:6px">
+                        <button class="btn btn-sm" @onclick="StartRedigerTittel">✎ Rediger tittel</button>
+                        <button class="btn btn-sm" @onclick="StartRedigerBeskrivelse">✎ Rediger beskrivelse</button>
+                    </div>
+                }
+            }
+        </div>
+    }
+
+    @* ── Statusovergang og låsing ──────────────────────────────────────────── *@
+    @if (liste.Status != AdresselisteStatus.Låst)
+    {
+        <div class="detail-section">
+            <div class="section-label">Status og låsing</div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;align-items:center">
+                @if (liste.Status == AdresselisteStatus.Utkast)
+                {
+                    <button class="btn btn-sm btn-primary" @onclick="SetKlar">Marker som Klar</button>
+                }
+                @if (liste.Status == AdresselisteStatus.Klar)
+                {
+                    <button class="btn btn-sm" @onclick="SetUtkast">← Tilbake til utkast</button>
+                    <button class="btn btn-sm btn-primary" @onclick="LåsAsync" disabled="@låser">
+                        @(låser ? "Låser..." : "🔒 Lås liste (ta snapshot)")
+                    </button>
+                }
+            </div>
+            @if (ekskluderte.Count > 0)
+            {
+                <div class="muted" style="margin-top:6px;font-size:12px">
+                    @ekskluderte.Count organisasjon(er) er avhuket og vil ikke tas med i snapshot.
+                </div>
+            }
+            @if (låsError is not null)
+            {
+                <div class="alert-error" style="margin-top:8px">@låsError</div>
+            }
+        </div>
+    }
+
+    @* ── Tilknyttede målgrupper ────────────────────────────────────────────── *@
+    <div class="detail-section">
+        <div class="section-header" style="margin-bottom:10px">
+            <span class="section-label">Tilknyttede målgrupper (@liste.Målgrupper.Count)</span>
+            @if (liste.Status != AdresselisteStatus.Låst)
+            {
+                <button class="btn btn-sm" @onclick="() => velgerMålgruppe = !velgerMålgruppe">
+                    @(velgerMålgruppe ? "Avbryt" : "+ Koble til målgruppe")
+                </button>
+            }
+        </div>
+
+        @if (velgerMålgruppe)
+        {
+            <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
+                <select class="form-input" style="max-width:320px" @bind="valgtMålgruppeId">
+                    <option value="0">– Velg målgruppe –</option>
+                    @foreach (var g in alleMålgrupper.Where(g =>
+                        !liste.Målgrupper.Any(m => m.MålgruppeId == g.Id)))
+                    {
+                        <option value="@g.Id">@g.Name (@g.Members.Count mottakere)</option>
+                    }
+                </select>
+                <button class="btn btn-sm btn-primary" @onclick="KobleTilAsync"
+                    disabled="@(valgtMålgruppeId == 0)">Koble til</button>
+            </div>
+        }
+
+        @if (!liste.Målgrupper.Any())
+        {
+            <div class="empty-state">Ingen målgrupper tilknyttet ennå.</div>
+        }
+        else
+        {
+            <div class="card">
+                @foreach (var m in liste.Målgrupper.OrderBy(x => x.Rekkefølge))
+                {
+                    <div class="card-row small">
+                        <div class="grow">
+                            <div class="row-name">@m.Målgruppe.Name</div>
+                            <div class="row-sub">
+                                @m.Målgruppe.Members.Count mottakere ·
+                                @(m.Målgruppe.Type == TargetGroupType.Dynamic ? "Dynamisk" : "Statisk")
+                            </div>
+                        </div>
+                        @if (liste.Status != AdresselisteStatus.Låst)
+                        {
+                            <button class="btn btn-sm btn-danger"
+                                @onclick="() => FjernMålgruppeAsync(m.MålgruppeId)">Fjern</button>
+                        }
+                    </div>
+                }
+            </div>
+        }
+    </div>
+
+    @* ── Tilknyttede abonnementslister ───────────────────────────────────── *@
+    <div class="detail-section">
+        <div class="section-header" style="margin-bottom:10px">
+            <span class="section-label">
+                Abonnementslister (@liste.Abonnementslister.Count)
+                @if (liste.Abonnementslister.Any())
+                {
+                    var totalt = liste.Abonnementslister.Sum(k => k.Abonnementsliste.Abonnenter.Count);
+                    <text> · @totalt abonnenter</text>
+                }
+            </span>
+            @if (liste.Status != AdresselisteStatus.Låst)
+            {
+                <button class="btn btn-sm" @onclick="() => velgerAbonnementsliste = !velgerAbonnementsliste">
+                    @(velgerAbonnementsliste ? "Avbryt" : "+ Koble til abonnementsliste")
+                </button>
+            }
+        </div>
+
+        @if (velgerAbonnementsliste)
+        {
+            <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
+                <select class="form-input" style="max-width:320px" @bind="valgtAbonnementslisteId">
+                    <option value="0">– Velg abonnementsliste –</option>
+                    @foreach (var l in alleAbonnementslister.Where(l =>
+                        !liste.Abonnementslister.Any(k => k.AbonnementslisteId == l.Id)))
+                    {
+                        <option value="@l.Id">@l.Navn (@l.Abonnenter.Count abonnenter)</option>
+                    }
+                </select>
+                <button class="btn btn-sm btn-primary" @onclick="KobleTilAbonnementslisteAsync"
+                    disabled="@(valgtAbonnementslisteId == 0)">Koble til</button>
+            </div>
+        }
+
+        @if (!liste.Abonnementslister.Any())
+        {
+            <div class="empty-state">Ingen abonnementslister tilknyttet ennå.</div>
+        }
+        else
+        {
+            <div class="card">
+                @foreach (var k in liste.Abonnementslister.OrderBy(x => x.Rekkefølge))
+                {
+                    <div class="card-row small">
+                        <div class="grow">
+                            <div class="row-name">@k.Abonnementsliste.Navn</div>
+                            <div class="row-sub">@k.Abonnementsliste.Abonnenter.Count abonnenter</div>
+                        </div>
+                        @if (liste.Status != AdresselisteStatus.Låst)
+                        {
+                            <button class="btn btn-sm btn-danger"
+                                @onclick="() => FjernAbonnementslisteAsync(k.AbonnementslisteId)">Fjern</button>
+                        }
+                    </div>
+                }
+            </div>
+        }
+    </div>
+
+    @* ── Mottakerliste — trevisning eller flat ────────────────────────────── *@
+    <div class="detail-section">
+        <div class="section-header" style="margin-bottom:10px">
+            <span class="section-label">
+                @if (liste.Status == AdresselisteStatus.Låst)
+                { <text>Snapshot-mottakere (@liste.Mottakere.Count)</text> }
+                else
+                { <text>Forhåndsvisning (@AntallMottakere mottakere@(ekskluderte.Count > 0 ? $", {ekskluderte.Count} ekskludert" : ""))</text> }
+            </span>
+            <div style="display:flex;gap:8px;align-items:center">
+                <label style="font-size:13px;cursor:pointer;display:flex;align-items:center;gap:6px">
+                    <input type="checkbox" @bind="trevisning" style="width:14px;height:14px" />
+                    Trevisning
+                </label>
+            </div>
+        </div>
+
+        <div style="margin-bottom:8px">
+            <input class="form-input" style="max-width:300px"
+                @bind="filter" @bind:event="oninput" @bind:after="ResetPage"
+                placeholder="Filtrer på navn eller orgnr..." />
+        </div>
+
+        @if (liste.Status == AdresselisteStatus.Låst)
+        {
+            @* ── Låst: flat liste av snapshot ──────────────────────────────── *@
+            var snapshotFiltrert = string.IsNullOrWhiteSpace(filter)
+                ? liste.Mottakere
+                : liste.Mottakere.Where(m =>
+                    m.Recipient.Name.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
+                    m.Recipient.ExternalId.Contains(filter, StringComparison.OrdinalIgnoreCase)).ToList();
+
+            <div class="card">
+                @foreach (var m in snapshotFiltrert.Skip(page * PageSize).Take(PageSize))
+                {
+                    var erAbonnent = m.Recipient.Type == RecipientType.Subscriber;
+                    var erEksp = !erAbonnent && expandedOrg == m.Recipient.ExternalId;
+                    <div class="card-row small @(erEksp ? "expanded" : "")"
+                         style="@(erAbonnent ? "" : "cursor:pointer")"
+                         @onclick="() => { if (!erAbonnent) ToggleOrgDetalj(m.Recipient.ExternalId); }">
+                        <div class="grow">
+                            <div class="row-name" style="@(erAbonnent ? "font-family:monospace;font-size:.93rem" : "")">
+                                @(m.Visningsnavn ?? m.Recipient.Name)
+                            </div>
+                            <div class="row-sub">
+                                @if (!erAbonnent)
+                                {
+                                    @if (m.Visningsnavn is not null) { <text>Brreg: @m.Recipient.Name · </text> }
+                                    @m.Recipient.ExternalId
+                                    @if (!string.IsNullOrEmpty(m.Recipient.OrgForm)) { <text> · @m.Recipient.OrgForm</text> }
+                                    @if (!string.IsNullOrEmpty(m.Recipient.PostalCity)) { <text> · @m.Recipient.PostalCity</text> }
+                                }
+                                @if (m.CoAdresse is not null) { <text> · <em>@m.CoAdresse</em></text> }
+                            </div>
+                        </div>
+                        @if (erAbonnent)
+                        {
+                            <span class="tag" style="font-size:.7rem">Abonnent</span>
+                        }
+                        else
+                        {
+                            <span class="expand-icon">@(erEksp ? "▲" : "▼")</span>
+                        }
+                    </div>
+                    @if (!erAbonnent)
+                    {
+                        <OrgDetalj Orgnr="@m.Recipient.ExternalId" Vis="@erEksp" />
+                    }
+                }
+            </div>
+            @if (snapshotFiltrert.Count > PageSize)
+            {
+                var totPages = (int)Math.Ceiling(snapshotFiltrert.Count / (double)PageSize);
+                <div class="pagination">
+                    <button class="btn btn-sm" disabled="@(page==0)" @onclick="()=>page--">←</button>
+                    <span class="muted">Side @(page+1) av @totPages (@snapshotFiltrert.Count treff)</span>
+                    <button class="btn btn-sm" disabled="@(page>=totPages-1)" @onclick="()=>page++">→</button>
+                </div>
+            }
+        }
+        else if (!trevisning)
+        {
+            @* ── Utkast/Klar: flat liste med live-data ──────────────────────── *@
+            @if (!Filtered.Any())
+            {
+                <div class="empty-state">Ingen mottakere ennå.</div>
+            }
+            else
+            {
+                <div class="card">
+                    @foreach (var r in PagedMottakere)
+                    {
+                        var ekskl = ekskluderte.Contains(r.Recipient.ExternalId);
+                        <div class="card-row small" style="@(ekskl ? "opacity:0.45" : "")">
+                            @if (liste.Status != AdresselisteStatus.Låst)
+                            {
+                                <input type="checkbox" checked="@(!ekskl)"
+                                    style="width:15px;height:15px;flex-shrink:0;cursor:pointer"
+                                    @onchange="() => ToggleEkskludering(r.Recipient.ExternalId)" />
+                            }
+                            <div class="grow" style="margin-left:6px">
+                                <div class="row-name">@r.VisNavn</div>
+                                <div class="row-sub">
+                                    @if (r.Visningsnavn is not null) { <text>Brreg: @r.Recipient.Name · </text> }
+                                    @r.Recipient.ExternalId · @r.Recipient.OrgForm · @r.Recipient.PostalCity
+                                    @if (r.CoAdresse is not null) { <text> · <em>@r.CoAdresse</em></text> }
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+                @if (TotalPages > 1)
+                {
+                    <div class="pagination">
+                        <button class="btn btn-sm" disabled="@(page==0)" @onclick="()=>{ page--; }">←</button>
+                        <span class="muted">Side @(page+1) av @TotalPages (@Filtered.Count treff)</span>
+                        <button class="btn btn-sm" disabled="@(page>=TotalPages-1)" @onclick="()=>{ page++; }">→</button>
+                    </div>
+                }
+            }
+        }
+        else
+        {
+            @* ── Trevisning: én node per målgruppe, ekspanderbar ────────────── *@
+            @foreach (var kobling in liste.Målgrupper.OrderBy(x => x.Rekkefølge))
+            {
+                var gruppe = kobling.Målgruppe;
+                var membersFiltrert = string.IsNullOrWhiteSpace(filter)
+                    ? gruppe.Members
+                    : gruppe.Members.Where(m =>
+                        m.Recipient.Name.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
+                        m.Recipient.ExternalId.Contains(filter, StringComparison.OrdinalIgnoreCase)).ToList();
+                var ekspandert = ekspanderte.Contains(gruppe.Id);
+                var antallEkskl = membersFiltrert.Count(m => ekskluderte.Contains(m.Recipient.ExternalId));
+
+                <div class="hierarchy-node" style="margin-bottom:6px">
+                    <div class="card-row small hierarchy-parent" @onclick="() => ToggleEkspander(gruppe.Id)"
+                         style="cursor:pointer;background:#fff;border:0.5px solid var(--gray-200);border-radius:var(--radius-md)">
+                        <span class="expand-icon">@(ekspandert ? "▾" : "▸")</span>
+                        <div class="grow">
+                            <div class="row-name">@gruppe.Name</div>
+                            <div class="row-sub">
+                                @membersFiltrert.Count mottakere
+                                @if (antallEkskl > 0) { <text> · <span style="color:var(--amber-600)">@antallEkskl ekskludert</span></text> }
+                                · @(gruppe.Type == TargetGroupType.Dynamic ? "Dynamisk" : "Statisk")
+                            </div>
+                        </div>
+                        @if (liste.Status != AdresselisteStatus.Låst && membersFiltrert.Any())
+                        {
+                            <button class="btn btn-sm" style="font-size:11px"
+                                @onclick:stopPropagation="true"
+                                @onclick="() => ToggleAlleIGruppe(gruppe)">
+                                @(antallEkskl == membersFiltrert.Count ? "Velg alle" : "Fjern alle")
+                            </button>
+                        }
+                    </div>
+
+                    @if (ekspandert)
+                    {
+                        @if (!membersFiltrert.Any())
+                        {
+                            <div class="muted" style="padding:8px 16px;font-size:12px">
+                                @if (gruppe.Members.Count == 0 && gruppe.Type == TargetGroupType.Dynamic)
+                                { <text>Ikke synkronisert ennå. Gå til målgruppa og synkroniser mot Brreg.</text> }
+                                else
+                                { <text>Ingen treff på «@filter».</text> }
+                            </div>
+                        }
+                        else
+                        {
+                            <div style="border:0.5px solid var(--gray-200);border-top:none;border-radius:0 0 var(--radius-md) var(--radius-md);background:#fff">
+                                @foreach (var m in membersFiltrert)
+                                {
+                                    var ekskl = ekskluderte.Contains(m.Recipient.ExternalId);
+                                    var erEksp = expandedOrg == m.Recipient.ExternalId;
+                                    <div class="card-row small hierarchy-child @(erEksp ? "expanded" : "")"
+                                         style="@(ekskl ? "opacity:0.45" : "");cursor:pointer"
+                                         @onclick="() => ToggleOrgDetalj(m.Recipient.ExternalId)">
+                                        @if (liste.Status != AdresselisteStatus.Låst)
+                                        {
+                                            <input type="checkbox" checked="@(!ekskl)"
+                                                style="width:14px;height:14px;flex-shrink:0;cursor:pointer"
+                                                @onclick:stopPropagation="true"
+                                                @onchange="() => ToggleEkskludering(m.Recipient.ExternalId)" />
+                                        }
+                                        <div class="grow" style="padding-left:8px">
+                                            <div class="row-name">@(m.Visningsnavn ?? m.Recipient.Name)</div>
+                                            <div class="row-sub">
+                                                @if (m.Visningsnavn is not null) { <text>Brreg: @m.Recipient.Name · </text> }
+                                                @m.Recipient.ExternalId · @m.Recipient.OrgForm · @m.Recipient.PostalCity
+                                                @if (m.CoAdresse is not null) { <text> · <em>@m.CoAdresse</em></text> }
+                                            </div>
+                                        </div>
+                                        <span class="expand-icon">@(erEksp ? "▲" : "▼")</span>
+                                    </div>
+                                    <OrgDetalj Orgnr="@m.Recipient.ExternalId" Vis="@erEksp" />
+                                }
+                            </div>
+                        }
+                    }
+                </div>
+            }
+        }
+    </div>
+
+    @* ── Snarvei: ny ad-hoc statisk målgruppe ────────────────────────────── *@
+    @if (liste.Status != AdresselisteStatus.Låst)
+    {
+        <div class="detail-section">
+            <div class="section-header" style="margin-bottom:6px">
+                <span class="section-label">Legg til enkeltorganisasjoner</span>
+            </div>
+            <div class="muted" style="font-size:12px;margin-bottom:8px">
+                Oppretter en ny statisk målgruppe og kobler den inn. Du kan søke opp og legge til enkeltorg på målgruppesiden.
+            </div>
+            @if (!visAdHocSkjema)
+            {
+                <button class="btn btn-sm" @onclick="() => visAdHocSkjema = true">+ Ny ad-hoc liste</button>
+            }
+            else
+            {
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                    <input class="form-input" style="max-width:280px" @bind="adHocNavn"
+                        placeholder="Navn på gruppen, f.eks. «Øvrige organisasjoner»" />
+                    <button class="btn btn-sm btn-primary" @onclick="OpprettAdHocAsync"
+                        disabled="@(string.IsNullOrWhiteSpace(adHocNavn) || lagrerAdHoc)">
+                        @(lagrerAdHoc ? "Oppretter..." : "Opprett og koble til")
+                    </button>
+                    <button class="btn btn-sm" @onclick="() => { visAdHocSkjema = false; adHocNavn = string.Empty; }">Avbryt</button>
+                </div>
+            }
+        </div>
+    }
+
+    @* ── API-informasjon ──────────────────────────────────────────────────── *@
+    @if (liste.Status == AdresselisteStatus.Låst)
+    {
+        <div class="detail-section">
+            <div class="section-label">API-endepunkter</div>
+            <div style="display:flex;flex-direction:column;gap:6px;margin-top:8px">
+                <code class="code-block">GET /api/v1/adresselister</code>
+                <code class="code-block">GET /api/v1/adresselister/@liste.Id</code>
+                <code class="code-block">GET /api/v1/adresselister/@liste.Id/mottakere</code>
+            </div>
+            <div class="muted" style="margin-top:6px">
+                Krever Maskinporten-token med scope <code>digdir:kontaktliste.read</code> (ikke aktivert i PoC)
+            </div>
+        </div>
+    }
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    Adresseliste? liste;
+    List<TargetGroup> alleMålgrupper = [];
+    List<Abonnementsliste> alleAbonnementslister = [];
+    List<LiveMottaker> liveMottakere = [];
+    HashSet<string> ekskluderte = [];
+    HashSet<int> ekspanderte = [];
+    string? expandedOrg;
+    void ToggleOrgDetalj(string orgnr) =>
+        expandedOrg = expandedOrg == orgnr ? null : orgnr;
+    bool velgerMålgruppe, velgerAbonnementsliste, låser, trevisning;
+    bool redigererTittel, redigererBeskrivelse;
+    string editTittel = "", editBeskrivelse = "";
+    string? låsError;
+    int valgtMålgruppeId;
+    int valgtAbonnementslisteId;
+    string filter = "";
+    int page = 0;
+    const int PageSize = 50;
+    bool visAdHocSkjema;
+    string adHocNavn = "";
+    bool lagrerAdHoc;
+
+    void ResetPage() => page = 0;
+
+    List<LiveMottaker> Filtered =>
+        string.IsNullOrWhiteSpace(filter) ? liveMottakere
+        : liveMottakere.Where(r =>
+            r.VisNavn.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
+            r.Recipient.ExternalId.Contains(filter, StringComparison.OrdinalIgnoreCase)).ToList();
+
+    List<LiveMottaker> PagedMottakere =>
+        Filtered.Skip(page * PageSize).Take(PageSize).ToList();
+
+    int TotalPages => (int)Math.Ceiling(Filtered.Count / (double)PageSize);
+
+    int AntallMottakere =>
+        liste?.Status == AdresselisteStatus.Låst
+            ? liste.Mottakere.Count
+            : liveMottakere.Count(r => !ekskluderte.Contains(r.Recipient.ExternalId));
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+        alleMålgrupper = await TgSvc.GetAllAsync();
+        alleAbonnementslister = await AbSvc.GetAllAsync();
+    }
+
+    async Task LoadAsync()
+    {
+        liste = await Svc.GetAsync(Id);
+        if (liste is not null)
+        {
+            ekskluderte = AdresselisteService.GetEkskluderte(liste);
+            if (liste.Status != AdresselisteStatus.Låst)
+                liveMottakere = AdresselisteService.GetLiveMottakere(liste);
+        }
+    }
+
+    // ── Tittel og beskrivelse ────────────────────────────────────────────────
+
+    void StartRedigerTittel()
+    {
+        if (liste?.Status == AdresselisteStatus.Låst) return;
+        editTittel = liste!.Tittel;
+        redigererTittel = true;
+    }
+
+    void AvbrytTittel() => redigererTittel = false;
+
+    async Task LagreTittelAsync()
+    {
+        if (string.IsNullOrWhiteSpace(editTittel)) return;
+        await Svc.UpdateAsync(Id, editTittel.Trim(), liste!.Beskrivelse);
+        redigererTittel = false;
+        await LoadAsync();
+    }
+
+    void StartRedigerBeskrivelse()
+    {
+        editBeskrivelse = liste!.Beskrivelse ?? "";
+        redigererBeskrivelse = true;
+    }
+
+    async Task LagreBeskrivelseAsync()
+    {
+        await Svc.UpdateAsync(Id, liste!.Tittel, editBeskrivelse.Trim().Length > 0 ? editBeskrivelse.Trim() : null);
+        redigererBeskrivelse = false;
+        await LoadAsync();
+    }
+
+    // ── Eksklusjoner ────────────────────────────────────────────────────────
+
+    async Task ToggleEkskludering(string externalId)
+    {
+        if (ekskluderte.Contains(externalId))
+            ekskluderte.Remove(externalId);
+        else
+            ekskluderte.Add(externalId);
+        await Svc.SetEkskluderteAsync(Id, ekskluderte);
+    }
+
+    async Task ToggleAlleIGruppe(TargetGroup gruppe)
+    {
+        var alleOrgnrs = gruppe.Members.Select(m => m.Recipient.ExternalId).ToList();
+        var alleEkskludert = alleOrgnrs.All(o => ekskluderte.Contains(o));
+        if (alleEkskludert)
+            foreach (var o in alleOrgnrs) ekskluderte.Remove(o);
+        else
+            foreach (var o in alleOrgnrs) ekskluderte.Add(o);
+        await Svc.SetEkskluderteAsync(Id, ekskluderte);
+    }
+
+    void ToggleEkspander(int gruppeId)
+    {
+        if (!ekspanderte.Add(gruppeId)) ekspanderte.Remove(gruppeId);
+    }
+
+    // ── Målgrupper ───────────────────────────────────────────────────────────
+
+    async Task KobleTilAsync()
+    {
+        if (valgtMålgruppeId == 0) return;
+        await Svc.AddMålgruppeAsync(Id, valgtMålgruppeId);
+        valgtMålgruppeId = 0;
+        velgerMålgruppe = false;
+        alleMålgrupper = await TgSvc.GetAllAsync();
+        await LoadAsync();
+    }
+
+    async Task FjernMålgruppeAsync(int mId)
+    {
+        await Svc.RemoveMålgruppeAsync(Id, mId);
+        await LoadAsync();
+    }
+
+    async Task KobleTilAbonnementslisteAsync()
+    {
+        if (valgtAbonnementslisteId == 0) return;
+        await Svc.AddAbonnementslisteAsync(Id, valgtAbonnementslisteId);
+        velgerAbonnementsliste = false;
+        valgtAbonnementslisteId = 0;
+        await LoadAsync();
+    }
+
+    async Task FjernAbonnementslisteAsync(int abonnementslisteId)
+    {
+        await Svc.RemoveAbonnementslisteAsync(Id, abonnementslisteId);
+        await LoadAsync();
+    }
+
+    // ── Ad-hoc statisk gruppe ────────────────────────────────────────────────
+
+    async Task OpprettAdHocAsync()
+    {
+        if (string.IsNullOrWhiteSpace(adHocNavn)) return;
+        lagrerAdHoc = true;
+        var gruppe = await TgSvc.CreateStaticAsync(adHocNavn.Trim(), TargetGroupScope.Private, []);
+        await Svc.AddMålgruppeAsync(Id, gruppe.Id);
+        adHocNavn = "";
+        visAdHocSkjema = false;
+        lagrerAdHoc = false;
+        alleMålgrupper = await TgSvc.GetAllAsync();
+        await LoadAsync();
+        Nav.NavigateTo($"/malgrupper/{gruppe.Id}");
+    }
+
+    // ── Status og låsing ────────────────────────────────────────────────────
+
+    async Task SetKlar()
+    {
+        await Svc.SetStatusAsync(Id, AdresselisteStatus.Klar);
+        await LoadAsync();
+    }
+
+    async Task SetUtkast()
+    {
+        await Svc.SetStatusAsync(Id, AdresselisteStatus.Utkast);
+        await LoadAsync();
+    }
+
+    async Task LåsAsync()
+    {
+        låser = true;
+        låsError = null;
+        var (ok, error) = await Svc.LåsAsync(Id);
+        if (!ok) { låsError = error; låser = false; return; }
+        await LoadAsync();
+        låser = false;
+    }
+
+    // ── Eksport ──────────────────────────────────────────────────────────────
+
+    static string SanitiserFilnavn(string navn)
+    {
+        var ugyldige = System.IO.Path.GetInvalidFileNameChars();
+        return string.Concat(navn.Select(c => ugyldige.Contains(c) ? '_' : c)).Trim();
+    }
+
+    async Task ExportJsonAsync()
+    {
+        if (liste is null) return;
+        var mottakere = liste.Mottakere.Select(m => new
+        {
+            organisasjonsnummer = m.Recipient.ExternalId,
+            navn = m.Visningsnavn ?? m.Recipient.Name,
+            brregNavn = m.Visningsnavn != null ? m.Recipient.Name : null,
+            type = m.Recipient.Type.ToString().ToLower(),
+            orgForm = m.Recipient.OrgForm,
+            postnummer = m.Recipient.PostalCode,
+            poststed = m.Recipient.PostalCity,
+            coAdresse = m.CoAdresse,
+            kildeMålgruppeId = m.KildeMålgruppeId,
+            kildeAbonnementslisteId = m.KildeAbonnementslisteId
+        });
+        var json = System.Text.Json.JsonSerializer.Serialize(mottakere,
+            new System.Text.Json.JsonSerializerOptions
+            {
+                WriteIndented = true,
+                Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+            });
+        var b64 = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(json));
+        await JS.InvokeVoidAsync("downloadFile", $"{SanitiserFilnavn(liste.Tittel)}.json", "application/json", b64);
+    }
+
+    async Task ExportCsvAsync()
+    {
+        if (liste is null) return;
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("organisasjonsnummer,navn,type,orgForm,postnummer,poststed");
+        foreach (var m in liste.Mottakere)
+            sb.AppendLine($"\"{m.Recipient.ExternalId}\",\"{m.Recipient.Name}\",\"{m.Recipient.Type.ToString().ToLower()}\",\"{m.Recipient.OrgForm}\",\"{m.Recipient.PostalCode}\",\"{m.Recipient.PostalCity}\"");
+        var b64 = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(sb.ToString()));
+        await JS.InvokeVoidAsync("downloadFile", $"{SanitiserFilnavn(liste.Tittel)}.csv", "text/csv", b64);
+    }
+
+    static string StatusLabel(AdresselisteStatus s) => s switch
+    {
+        AdresselisteStatus.Utkast => "Utkast",
+        AdresselisteStatus.Klar   => "Klar",
+        AdresselisteStatus.Låst   => "Låst",
+        _ => s.ToString()
+    };
+
+    static string StatusTagClass(AdresselisteStatus s) => s switch
+    {
+        AdresselisteStatus.Låst => "tag-static",
+        AdresselisteStatus.Klar => "tag-dynamic",
+        _ => ""
+    };
+}

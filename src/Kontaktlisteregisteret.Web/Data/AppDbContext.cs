@@ -7,13 +7,27 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<TargetGroup> TargetGroups => Set<TargetGroup>();
     public DbSet<Recipient> Recipients => Set<Recipient>();
     public DbSet<TargetGroupMember> TargetGroupMembers => Set<TargetGroupMember>();
+    public DbSet<Adresseliste> Adresselister => Set<Adresseliste>();
+    public DbSet<AdresselisteMålgruppe> AdresselisteMålgrupper => Set<AdresselisteMålgruppe>();
+    public DbSet<AdresselisteMottaker> AdresselisteMottakere => Set<AdresselisteMottaker>();
+    public DbSet<Abonnementsliste> Abonnementslister => Set<Abonnementsliste>();
+    public DbSet<Abonnent> Abonnenter => Set<Abonnent>();
+    public DbSet<AdresselisteAbonnementsliste> AdresselisteAbonnementslister => Set<AdresselisteAbonnementsliste>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
         b.Entity<TargetGroup>().HasIndex(x => x.Name);
         b.Entity<Recipient>().HasIndex(x => x.ExternalId).IsUnique();
+        b.Entity<TargetGroupMember>().HasKey(x => x.Id);
         b.Entity<TargetGroupMember>()
-            .HasKey(x => new { x.TargetGroupId, x.RecipientId });
+            .HasIndex(x => new { x.TargetGroupId, x.RecipientId }); // ikke unik — tillater c/o-duplikater
+        b.Entity<AdresselisteMålgruppe>()
+            .HasKey(x => new { x.AdresselisteId, x.MålgruppeId });
+        b.Entity<AdresselisteAbonnementsliste>()
+            .HasKey(x => new { x.AdresselisteId, x.AbonnementslisteId });
+        b.Entity<Adresseliste>().HasIndex(x => x.Status);
+        b.Entity<Abonnent>()
+            .HasIndex(x => new { x.AbonnementslisteId, x.Epost }).IsUnique();
     }
 }
 
@@ -45,13 +59,100 @@ public class Recipient
 
 public class TargetGroupMember
 {
+    /// Løpenummer — tillater samme Recipient å ligge i gruppen flere ganger med ulikt Visningsnavn
+    public int Id { get; set; }
     public int TargetGroupId { get; set; }
     public TargetGroup TargetGroup { get; set; } = null!;
     public int RecipientId { get; set; }
     public Recipient Recipient { get; set; } = null!;
     public DateTime AddedAt { get; set; } = DateTime.UtcNow;
+    /// Vises istedenfor mottakerens Brreg-navn (f.eks. "Forum for Barnekonvensjonen")
+    public string? Visningsnavn { get; set; }
+    /// c/o-adresse eller tilleggsopplysning (f.eks. "c/o Redd Barna")
+    public string? CoAdresse { get; set; }
 }
 
 public enum TargetGroupType { Dynamic, Static }
 public enum TargetGroupScope { Private, Shared }
 public enum RecipientType { Organization, Person, Subscriber }
+
+// ── Adresseliste ────────────────────────────────────────────────────────────
+
+public class Adresseliste
+{
+    public int Id { get; set; }
+    public string Tittel { get; set; } = "";
+    public string? Beskrivelse { get; set; }
+    public AdresselisteStatus Status { get; set; } = AdresselisteStatus.Utkast;
+    public string? OpprettetAv { get; set; }
+    public DateTime OpprettetAt { get; set; } = DateTime.UtcNow;
+    public DateTime? LåstAt { get; set; }
+    /// JSON-serialisert List<string> med ExternalId (orgnr) for ekskluderte mottakere
+    public string? EkskluderteJson { get; set; }
+    public List<AdresselisteMålgruppe> Målgrupper { get; set; } = [];
+    public List<AdresselisteAbonnementsliste> Abonnementslister { get; set; } = [];
+    public List<AdresselisteMottaker> Mottakere { get; set; } = [];
+}
+
+public enum AdresselisteStatus { Utkast, Klar, Låst }
+
+// ── Abonnementsliste ─────────────────────────────────────────────────────────
+
+public class Abonnementsliste
+{
+    public int Id { get; set; }
+    public string Navn { get; set; } = "";
+    public string? Beskrivelse { get; set; }
+    public DateTime OpprettetAt { get; set; } = DateTime.UtcNow;
+    public string? OpprettetAv { get; set; }
+    public List<Abonnent> Abonnenter { get; set; } = [];
+}
+
+public class Abonnent
+{
+    public int Id { get; set; }
+    public int AbonnementslisteId { get; set; }
+    public Abonnementsliste Abonnementsliste { get; set; } = null!;
+    [System.ComponentModel.DataAnnotations.MaxLength(254)]
+    public string Epost { get; set; } = "";
+    public DateTime LagtTilAt { get; set; } = DateTime.UtcNow;
+    public AbonnentKilde Kilde { get; set; } = AbonnentKilde.Manuell;
+}
+
+public enum AbonnentKilde { Manuell, Api }
+
+/// Kobling mellom Adresseliste og Målgruppe (mange-til-mange)
+public class AdresselisteMålgruppe
+{
+    public int AdresselisteId { get; set; }
+    public Adresseliste Adresseliste { get; set; } = null!;
+    public int MålgruppeId { get; set; }
+    public TargetGroup Målgruppe { get; set; } = null!;
+    public int Rekkefølge { get; set; }
+}
+
+/// Kobling mellom Adresseliste og Abonnementsliste (mange-til-mange)
+public class AdresselisteAbonnementsliste
+{
+    public int AdresselisteId { get; set; }
+    public Adresseliste Adresseliste { get; set; } = null!;
+    public int AbonnementslisteId { get; set; }
+    public Abonnementsliste Abonnementsliste { get; set; } = null!;
+    public int Rekkefølge { get; set; }
+}
+
+/// Fryst snapshot — fylles ut ved låsing, endres aldri etterpå
+public class AdresselisteMottaker
+{
+    public int Id { get; set; }
+    public int AdresselisteId { get; set; }
+    public Adresseliste Adresseliste { get; set; } = null!;
+    public int RecipientId { get; set; }
+    public Recipient Recipient { get; set; } = null!;
+    public int? KildeMålgruppeId { get; set; }
+    public int? KildeAbonnementslisteId { get; set; }
+    /// Fryst fra TargetGroupMember.Visningsnavn ved låsing
+    public string? Visningsnavn { get; set; }
+    /// Fryst fra TargetGroupMember.CoAdresse ved låsing
+    public string? CoAdresse { get; set; }
+}

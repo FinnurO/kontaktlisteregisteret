@@ -49,6 +49,34 @@ public class TargetGroupService(AppDbContext db, BrregService brreg)
         return group;
     }
 
+    public async Task<TargetGroup> KopierAsync(int id)
+    {
+        var original = await GetAsync(id) ?? throw new KeyNotFoundException();
+        var kopi = new TargetGroup
+        {
+            Name = original.Name + " (kopi)",
+            Type = original.Type,
+            Scope = original.Scope,
+            DynamicCriteriaJson = original.DynamicCriteriaJson
+        };
+        db.TargetGroups.Add(kopi);
+        await db.SaveChangesAsync();
+        if (original.Type == TargetGroupType.Static)
+        {
+            // Kopierer alle TGM-rader inkludert Visningsnavn/CoAdresse
+            foreach (var m in original.Members)
+                db.TargetGroupMembers.Add(new()
+                {
+                    TargetGroupId = kopi.Id,
+                    RecipientId = m.RecipientId,
+                    Visningsnavn = m.Visningsnavn,
+                    CoAdresse = m.CoAdresse
+                });
+            await db.SaveChangesAsync();
+        }
+        return kopi;
+    }
+
     public async Task DeleteAsync(int id)
     {
         var group = await db.TargetGroups.FindAsync(id);
@@ -59,6 +87,12 @@ public class TargetGroupService(AppDbContext db, BrregService brreg)
         }
     }
 
+    public async Task SaveCriteriaAsync(TargetGroup group)
+    {
+        db.TargetGroups.Update(group);
+        await db.SaveChangesAsync();
+    }
+
     public async Task SyncDynamicGroupAsync(TargetGroup group)
     {
         if (group.Type != TargetGroupType.Dynamic || group.DynamicCriteriaJson is null) return;
@@ -67,6 +101,50 @@ public class TargetGroupService(AppDbContext db, BrregService brreg)
         var recipients = enheter.Select(e => BrregEnhetToRecipient(e)).ToList();
         await ReplaceRecipientsAsync(group.Id, recipients);
     }
+
+    /// Oppdaterer visningsnavn/coAdresse på en konkret TGM-rad (identifisert ved TGM.Id)
+    public async Task SetVisningsnavnAsync(int memberId, string? visningsnavn, string? coAdresse)
+    {
+        var member = await db.TargetGroupMembers.FindAsync(memberId);
+        if (member is null) return;
+        member.Visningsnavn = string.IsNullOrWhiteSpace(visningsnavn) ? null : visningsnavn.Trim();
+        member.CoAdresse = string.IsNullOrWhiteSpace(coAdresse) ? null : coAdresse.Trim();
+        await db.SaveChangesAsync();
+    }
+
+    /// Fjerner én konkret TGM-rad (identifisert ved TGM.Id)
+    public async Task RemoveMemberAsync(int memberId)
+    {
+        var member = await db.TargetGroupMembers.FindAsync(memberId);
+        if (member is not null)
+        {
+            db.TargetGroupMembers.Remove(member);
+            await db.SaveChangesAsync();
+        }
+    }
+
+    /// Legger til et orgnr med eksplisitt visningsnavn — tillater samme Recipient å ligge to ganger
+    public async Task AddMedVisningsnavnAsync(int groupId, BrregEnhet e, string visningsnavn, string? coAdresse)
+    {
+        var existing = await db.Recipients.FirstOrDefaultAsync(x => x.ExternalId == e.organisasjonsnummer);
+        if (existing is null)
+        {
+            existing = BrregEnhetToRecipient(e);
+            db.Recipients.Add(existing);
+            await db.SaveChangesAsync();
+        }
+        db.TargetGroupMembers.Add(new()
+        {
+            TargetGroupId = groupId,
+            RecipientId = existing.Id,
+            Visningsnavn = visningsnavn.Trim(),
+            CoAdresse = string.IsNullOrWhiteSpace(coAdresse) ? null : coAdresse.Trim()
+        });
+        await db.SaveChangesAsync();
+    }
+
+    public async Task AddMembersAsync(int groupId, List<Recipient> recipients) =>
+        await AddRecipientsAsync(groupId, recipients);
 
     private async Task AddRecipientsAsync(int groupId, List<Recipient> recipients)
     {

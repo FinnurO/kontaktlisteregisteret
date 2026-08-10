@@ -29,11 +29,11 @@
                 <div class="type-grid">
                     <div class="type-option @(type == "dynamic" ? "selected" : "")" @onclick='() => type = "dynamic"'>
                         <div class="type-title">Dynamisk</div>
-                        <div class="type-desc">Regler mot Brreg — oppdateres automatisk</div>
+                        <div class="type-desc">Regler mot Brreg — oppdateres ved synkronisering</div>
                     </div>
                     <div class="type-option @(type == "static-orgnr" ? "selected" : "")" @onclick='() => type = "static-orgnr"'>
                         <div class="type-title">Statisk — orgnr-liste</div>
-                        <div class="type-desc">Last opp CSV med organisasjonsnummer</div>
+                        <div class="type-desc">Lim inn organisasjonsnummer, valideres mot Brreg</div>
                     </div>
                     <div class="type-option @(type == "static-search" ? "selected" : "")" @onclick='() => type = "static-search"'>
                         <div class="type-title">Statisk — søk og velg</div>
@@ -46,53 +46,181 @@
     else if (step == 2 && type == "dynamic")
     {
         <div class="wizard-body">
-            <h2 style="font-size:15px;margin-bottom:12px">Filterregler</h2>
+            <h2 style="font-size:15px;margin-bottom:16px;font-weight:600">Filterregler</h2>
             <div class="form-row">
                 <div class="form-group" style="flex:1">
                     <label class="form-label">Organisasjonsform</label>
                     <select class="form-input" @bind="criteria.OrgForm">
-                        <option value="">Alle</option>
-                        <option value="KOMM">KOMM – Kommune</option>
-                        <option value="FKF">FKF – Fylkeskommune</option>
-                        <option value="STAT">STAT – Staten</option>
-                        <option value="AS">AS – Aksjeselskap</option>
-                        <option value="STI">STI – Stiftelse</option>
-                        <option value="FLI">FLI – Forening/lag/innretning</option>
-                        <option value="SA">SA – Samvirkeforetak</option>
-                        <option value="IKS">IKS – Interkommunalt selskap</option>
+                        <option value="">Alle organisasjonsformer</option>
+                        <optgroup label="Offentlig sektor">
+                            <option value="KOMM">KOMM – Kommune</option>
+                            <option value="FYLK">FYLK – Fylkeskommune</option>
+                            <option value="STAT">STAT – Staten</option>
+                            <option value="KF">KF – Kommunalt foretak</option>
+                            <option value="FKF">FKF – Fylkeskommunalt foretak</option>
+                            <option value="IKS">IKS – Interkommunalt selskap</option>
+                            <option value="ORGL">ORGL – Organisasjonsledd</option>
+                        </optgroup>
+                        <optgroup label="Næringsliv">
+                            <option value="AS">AS – Aksjeselskap</option>
+                            <option value="ASA">ASA – Allmennaksjeselskap</option>
+                            <option value="ENK">ENK – Enkeltpersonforetak</option>
+                            <option value="ANS">ANS – Ansvarlig selskap</option>
+                            <option value="DA">DA – Delt ansvar</option>
+                            <option value="NUF">NUF – Norskregistrert utenlandsk foretak</option>
+                        </optgroup>
+                        <optgroup label="Organisasjoner">
+                            <option value="STI">STI – Stiftelse</option>
+                            <option value="FLI">FLI – Forening/lag/innretning</option>
+                            <option value="SA">SA – Samvirkeforetak</option>
+                            <option value="BA">BA – Boligbyggelag</option>
+                            <option value="BRL">BRL – Borettslag</option>
+                        </optgroup>
                     </select>
                 </div>
                 <div class="form-group" style="flex:1">
-                    <label class="form-label">Næringskode (prefiks)</label>
-                    <input class="form-input" @bind="criteria.NacePrefix" placeholder="F.eks. 90 for kultur" />
+                    <label class="form-label">Næringskode (NACE)</label>
+                    <select class="form-input" @bind="naceSelection" @bind:after="OnNaceSelected">
+                        <option value="">Alle næringskoder</option>
+                        <optgroup label="Primærnæringer">
+                            <option value="01">01 – Jordbruk og jakt</option>
+                            <option value="02">02 – Skogbruk</option>
+                            <option value="03">03 – Fiske og akvakultur</option>
+                        </optgroup>
+                        <optgroup label="Industri og energi">
+                            <option value="10">10–12 – Næringsmidler, drikke, tobakk</option>
+                            <option value="19">19–25 – Kjemisk industri, metaller</option>
+                            <option value="35">35 – Elektrisitets- og gassforsyning</option>
+                            <option value="36">36–39 – Vann, avløp, renovasjon</option>
+                        </optgroup>
+                        <optgroup label="Bygg og handel">
+                            <option value="41">41–43 – Bygge- og anleggsvirksomhet</option>
+                            <option value="45">45–47 – Varehandel</option>
+                        </optgroup>
+                        <optgroup label="Transport og reiseliv">
+                            <option value="49">49–53 – Transport og lagring</option>
+                            <option value="55">55–56 – Overnatting og servering</option>
+                        </optgroup>
+                        <optgroup label="IKT og finans">
+                            <option value="58">58–63 – Informasjon og kommunikasjon</option>
+                            <option value="64">64–66 – Finans og forsikring</option>
+                        </optgroup>
+                        <optgroup label="Faglig og teknisk">
+                            <option value="68">68 – Eiendom</option>
+                            <option value="69">69–75 – Faglig og vitenskapelig tjenesteyting</option>
+                            <option value="77">77–82 – Forretningsmessig tjenesteyting</option>
+                        </optgroup>
+                        <optgroup label="Offentlig og ideell">
+                            <option value="84">84 – Offentlig administrasjon og forsvar</option>
+                            <option value="85">85 – Undervisning</option>
+                            <option value="86">86–88 – Helse- og sosialtjenester</option>
+                            <option value="90">90–93 – Kultur, underholdning og fritid</option>
+                            <option value="94">94–96 – Annen tjenesteyting / organisasjoner</option>
+                        </optgroup>
+                        <option value="__custom__">Skriv inn kode manuelt...</option>
+                    </select>
+                    @if (naceSelection == "__custom__")
+                    {
+                        <input class="form-input" style="margin-top:6px" @bind="criteria.NacePrefix"
+                            placeholder="F.eks. 86.101" />
+                    }
                 </div>
             </div>
+            <div class="form-group" style="max-width:420px">
+                <label class="form-label">Aktivitet</label>
+                <input class="form-input" list="aktivitet-list" @bind="criteria.AktivitetFilter"
+                    placeholder="F.eks. Skole, Barnehage, Sykehjem..." />
+                <datalist id="aktivitet-list">
+                    <option value="Skole" />
+                    <option value="Barnehage" />
+                    <option value="Sykehjem" />
+                    <option value="Helsestasjon" />
+                    <option value="Bibliotek" />
+                    <option value="Kulturhus" />
+                    <option value="Idrettshall" />
+                    <option value="Svømmehall" />
+                    <option value="Brannstasjon" />
+                    <option value="Vannverk" />
+                    <option value="NAV" />
+                    <option value="Avfallshåndtering" />
+                </datalist>
+                <div class="muted" style="margin-top:4px">
+                    Filtreres lokalt etter henting fra Brreg. Kombiner gjerne med organisasjonsform eller sektorkode for raskere resultat.
+                </div>
+            </div>
+            <div class="form-group" style="max-width:420px">
+                <label class="form-label">Virksomhetsstatus</label>
+                <select class="form-input" @bind="criteria.Aktivitet">
+                    <option value="aktive">Kun aktive virksomheter</option>
+                    <option value="">Alle (inkl. slettede)</option>
+                    <option value="avvikling">Under avvikling</option>
+                    <option value="konkurs">Konkurs</option>
+                </select>
+            </div>
+            <div class="form-group" style="max-width:420px">
+                <label class="form-label">Institusjonell sektorkode</label>
+                <select class="form-input" @bind="criteria.SektorKode">
+                    <option value="">Alle sektorer</option>
+                    <optgroup label="Offentlig forvaltning">
+                        <option value="1110">1110 – Statsforvaltningen</option>
+                        <option value="1120">1120 – Statsforetak</option>
+                        <option value="1510">1510 – Kommuneforetak</option>
+                        <option value="6100">6100 – Kommuneforvaltningen</option>
+                        <option value="6500">6500 – Fylkeskommuneforvaltningen</option>
+                    </optgroup>
+                    <optgroup label="Næringsliv">
+                        <option value="2100">2100 – Statsaksjeselskaper o.l.</option>
+                        <option value="2300">2300 – Andre offentlig eide foretak</option>
+                        <option value="3100">3100 – Private aksjeselskaper mv.</option>
+                        <option value="3200">3200 – Private personlige foretak mv.</option>
+                    </optgroup>
+                    <optgroup label="Ideell og annet">
+                        <option value="7000">7000 – Ideelle organisasjoner mv.</option>
+                        <option value="8200">8200 – Banker og finansforetak</option>
+                        <option value="9000">9000 – Utenlandske sektorer</option>
+                    </optgroup>
+                </select>
+            </div>
+            <div class="form-group">
+                <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+                    <input type="checkbox" @bind="criteria.IncludeSubUnits" style="width:16px;height:16px" />
+                    <span>Inkluder underliggende enheter (underenheter fra Brreg)</span>
+                </label>
+                <div class="muted" style="margin-top:4px;margin-left:24px">
+                    Henter også alle virksomheter som er registrert under de treffende enhetene.
+                </div>
+            </div>
+
             @if (previewLoading)
             {
-                <div class="loading">Henter fra Brreg...</div>
+                <div class="loading">Henter fra Brreg@(criteria.IncludeSubUnits ? " (inkl. underenheter — kan ta litt tid)..." : "...")</div>
             }
             else if (previewResults.Any())
             {
                 <div class="preview-count">~@previewResults.Count mottakere</div>
                 <div class="card" style="margin-top:8px">
-                    @foreach (var e in previewResults.Take(5))
+                    @foreach (var e in previewResults.Take(10))
                     {
                         <div class="card-row small">
                             <div class="grow">
                                 <div class="row-name">@e.navn</div>
-                                <div class="row-sub">@e.organisasjonsnummer · @e.organisasjonsform?.kode</div>
+                                <div class="row-sub">@e.organisasjonsnummer · @e.organisasjonsform?.beskrivelse · @e.forretningsadresse?.poststed</div>
                             </div>
                         </div>
                     }
-                    @if (previewResults.Count > 5)
+                    @if (previewResults.Count > 10)
                     {
-                        <div class="card-row small muted">+ @(previewResults.Count - 5) til</div>
+                        <div class="card-row small muted">+ @(previewResults.Count - 10) til</div>
                     }
                 </div>
             }
-            <button class="btn" style="margin-top:10px" @onclick="PreviewAsync">
+            <button class="btn" style="margin-top:10px" @onclick="PreviewAsync" disabled="@previewLoading">
                 Forhåndsvis resultater
             </button>
+            @if (previewError is not null)
+            {
+                <div class="alert-error" style="margin-top:8px"><strong>Feil:</strong> @previewError</div>
+            }
         </div>
     }
     else if (step == 2 && type == "static-orgnr")
@@ -129,7 +257,7 @@
                     }
                 </div>
             }
-            <button class="btn" style="margin-top:10px" @onclick="ValidateOrgnrAsync">
+            <button class="btn" style="margin-top:10px" @onclick="ValidateOrgnrAsync" disabled="@validating">
                 Valider mot Brreg
             </button>
         </div>
@@ -138,8 +266,10 @@
     {
         <div class="wizard-body">
             <div class="form-row">
-                <input class="form-input" style="flex:1" @bind="searchQuery" placeholder="Søk på navn eller orgnr..." />
-                <button class="btn" @onclick="SearchBrregAsync">Søk</button>
+                <input class="form-input" style="flex:1" @bind="searchQuery"
+                    @onkeydown="@(async e => { if (e.Key == "Enter") await SearchBrregAsync(); })"
+                    placeholder="Søk på navn eller orgnr..." />
+                <button class="btn" @onclick="SearchBrregAsync" disabled="@searching">Søk</button>
             </div>
             @if (searching)
             {
@@ -150,14 +280,15 @@
                 <div class="card" style="margin-top:8px">
                     @foreach (var e in searchResults)
                     {
+                        var isSelected = selectedOrgnrs.Contains(e.organisasjonsnummer);
                         <div class="card-row small">
                             <div class="grow">
                                 <div class="row-name">@e.navn</div>
-                                <div class="row-sub">@e.organisasjonsnummer · @e.organisasjonsform?.kode · @e.postadresse?.poststed</div>
+                                <div class="row-sub">@e.organisasjonsnummer · @e.organisasjonsform?.beskrivelse · @e.forretningsadresse?.poststed</div>
                             </div>
-                            @if (selectedOrgnrs.Contains(e.organisasjonsnummer))
+                            @if (isSelected)
                             {
-                                <button class="btn btn-sm tag-static" @onclick="() => selectedOrgnrs.Remove(e.organisasjonsnummer)">
+                                <button class="btn btn-sm tag-static" @onclick="() => { selectedOrgnrs.Remove(e.organisasjonsnummer); selectedEnheter.Remove(e.organisasjonsnummer); }">
                                     ✓ Valgt
                                 </button>
                             }
@@ -176,7 +307,7 @@
                 <div style="margin-top:12px">
                     <div class="form-label">Valgte (@selectedOrgnrs.Count)</div>
                     <div class="card">
-                        @foreach (var orgnr in selectedOrgnrs)
+                        @foreach (var orgnr in selectedOrgnrs.ToList())
                         {
                             <div class="card-row small">
                                 <div class="grow">
@@ -199,9 +330,29 @@
                 <div class="stat-card"><div class="stat-label">Type</div><div>@TypeDisplayName</div></div>
                 <div class="stat-card"><div class="stat-label">Mottakere</div><div class="stat-value">@RecipientCount</div></div>
             </div>
+            @if (type == "dynamic")
+            {
+                <div style="margin-top:12px">
+                    <div class="form-label">Filterregler</div>
+                    <div class="chips" style="margin-top:6px">
+                        @if (!string.IsNullOrEmpty(criteria.OrgForm))
+                            { <span class="chip">Org.form: @criteria.OrgForm</span> }
+                        @if (!string.IsNullOrEmpty(criteria.NacePrefix))
+                            { <span class="chip">NACE starter med: @criteria.NacePrefix</span> }
+                        @if (!string.IsNullOrEmpty(criteria.AktivitetFilter))
+                            { <span class="chip">Aktivitet: @criteria.AktivitetFilter</span> }
+                        @if (!string.IsNullOrEmpty(criteria.Aktivitet))
+                            { <span class="chip">Status: @AktivitetLabel(criteria.Aktivitet)</span> }
+                        @if (!string.IsNullOrEmpty(criteria.SektorKode))
+                            { <span class="chip">Sektor: @criteria.SektorKode</span> }
+                        @if (criteria.IncludeSubUnits)
+                            { <span class="chip">Inkl. underenheter</span> }
+                    </div>
+                </div>
+            }
             @if (error is not null)
             {
-                <div class="alert-error">@error</div>
+                <div class="alert-error" style="margin-top:12px">@error</div>
             }
         </div>
     }
@@ -235,9 +386,11 @@
     string name = "";
     string type = "dynamic";
     DynamicCriteria criteria = new();
+    string naceSelection = "";
     string orgnrInput = "";
     string searchQuery = "";
     string? error;
+    string? previewError;
     bool saving, previewLoading, validating, searching;
     List<BrregEnhet> previewResults = [];
     List<OrgnrValidationResult> validationResults = [];
@@ -245,7 +398,13 @@
     HashSet<string> selectedOrgnrs = [];
     Dictionary<string, BrregEnhet> selectedEnheter = [];
 
-    bool CanProceed => step == 1 ? !string.IsNullOrWhiteSpace(name) && !string.IsNullOrWhiteSpace(type) : true;
+    void OnNaceSelected()
+    {
+        if (naceSelection != "__custom__")
+            criteria.NacePrefix = naceSelection;
+    }
+
+    bool CanProceed => step == 1 ? !string.IsNullOrWhiteSpace(name) : true;
 
     string TypeDisplayName => type switch
     {
@@ -263,16 +422,14 @@
         _ => 0
     };
 
-    async Task NextStepAsync()
-    {
-        if (step == 1) { step = 2; return; }
-        step = 3;
-    }
+    void NextStepAsync() => step++;
 
     async Task PreviewAsync()
     {
         previewLoading = true;
+        previewError = null;
         previewResults = await Brreg.EvaluateDynamicCriteriaAsync(criteria);
+        previewError = Brreg.LastError;
         previewLoading = false;
     }
 
@@ -286,6 +443,7 @@
 
     async Task SearchBrregAsync()
     {
+        if (string.IsNullOrWhiteSpace(searchQuery)) return;
         searching = true;
         searchResults = await Brreg.SearchAsync(searchQuery);
         searching = false;
@@ -319,6 +477,14 @@
             saving = false;
         }
     }
+
+    static string AktivitetLabel(string a) => a switch
+    {
+        "aktive" => "Kun aktive",
+        "avvikling" => "Under avvikling",
+        "konkurs" => "Konkurs",
+        _ => "Alle"
+    };
 
     static string StatusClass(ValidationStatus s) => s switch
     {

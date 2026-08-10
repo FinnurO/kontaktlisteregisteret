@@ -1,0 +1,112 @@
+@page "/abonnenter"
+@inject AbonnementslisteService Svc
+@inject NavigationManager Nav
+
+<PageTitle>Abonnementslister — Kontaktlisteregisteret</PageTitle>
+
+<div class="page-header">
+    <h1>Abonnementslister</h1>
+    <button class="btn btn-primary" @onclick="() => visOpprettSkjema = !visOpprettSkjema">
+        @(visOpprettSkjema ? "Avbryt" : "+ Ny abonnementsliste")
+    </button>
+</div>
+
+<p style="color:var(--text-muted);margin-bottom:1.5rem">
+    Abonnementslister brukes for privatpersoner som har samtykket til å motta utsendelser.
+    Listene kan vedlikeholdes manuelt her eller via API.
+</p>
+
+@* ── Opprettskjema ─────────────────────────────────────────────────────── *@
+@if (visOpprettSkjema)
+{
+    <div class="card" style="margin-bottom:1.5rem;padding:1.25rem">
+        <h3 style="margin:0 0 1rem">Ny abonnementsliste</h3>
+        <div style="display:grid;gap:.75rem;max-width:520px">
+            <div>
+                <label class="form-label">Navn <span style="color:var(--danger)">*</span></label>
+                <input class="form-input" type="text" placeholder="f.eks. Høring av NOU 2025:1"
+                       @bind="nyttNavn" @bind:event="oninput" style="width:100%" />
+            </div>
+            <div>
+                <label class="form-label">Beskrivelse</label>
+                <textarea class="form-input" rows="2" placeholder="Valgfri beskrivelse"
+                          @bind="nyBeskrivelse" style="width:100%;resize:vertical"></textarea>
+            </div>
+            @if (!string.IsNullOrEmpty(opprettFeil))
+            {
+                <div class="form-error">@opprettFeil</div>
+            }
+            <div>
+                <button class="btn btn-primary" @onclick="OpprettAsync"
+                        disabled="@(string.IsNullOrWhiteSpace(nyttNavn) || oppretter)">
+                    @(oppretter ? "Lagrer…" : "Opprett liste")
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@* ── Liste over abonnementslister ─────────────────────────────────────── *@
+@if (!lister.Any())
+{
+    <div class="empty-state">
+        Ingen abonnementslister ennå.
+    </div>
+}
+else
+{
+    <div class="card">
+        @foreach (var l in lister)
+        {
+            var url = "abonnenter/" + l.Id;
+            <div class="card-row" @onclick="() => Nav.NavigateTo(url)" style="cursor:pointer">
+                <div class="grow">
+                    <div class="row-name">@l.Navn</div>
+                    <div class="row-sub">
+                        @l.Abonnenter.Count abonnenter ·
+                        Opprettet @l.OpprettetAt.ToLocalTime().ToString("dd. MMM yyyy")
+                        @if (!string.IsNullOrEmpty(l.OpprettetAv))
+                        {
+                            <text> · @l.OpprettetAv</text>
+                        }
+                        @if (!string.IsNullOrEmpty(l.Beskrivelse))
+                        {
+                            <text> · @l.Beskrivelse</text>
+                        }
+                    </div>
+                </div>
+                <span class="tag">@l.Abonnenter.Count</span>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    List<Abonnementsliste> lister = [];
+    bool visOpprettSkjema;
+    string nyttNavn = string.Empty;
+    string nyBeskrivelse = string.Empty;
+    string opprettFeil = string.Empty;
+    bool oppretter;
+
+    protected override async Task OnInitializedAsync() =>
+        lister = await Svc.GetAllAsync();
+
+    async Task OpprettAsync()
+    {
+        if (string.IsNullOrWhiteSpace(nyttNavn)) return;
+        oppretter = true;
+        opprettFeil = string.Empty;
+
+        try
+        {
+            var liste = await Svc.OpprettAsync(nyttNavn, nyBeskrivelse);
+            Nav.NavigateTo($"/abonnenter/{liste.Id}");
+        }
+        catch (Exception ex)
+        {
+            opprettFeil = ex.Message;
+            oppretter = false;
+        }
+    }
+}

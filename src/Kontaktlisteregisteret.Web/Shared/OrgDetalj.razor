@@ -1,0 +1,134 @@
+@inject BrregService Brreg
+
+@if (!Vis) { return; }
+
+@if (laster)
+{
+    <div class="expand-body" style="font-size:12px;color:var(--gray-600)">Henter fra Brreg...</div>
+}
+else if (enhet is not null)
+{
+    <div class="expand-body">
+        <div class="detail-grid">
+            <div>
+                <span class="detail-label">Organisasjonsnummer</span>
+                @enhet.organisasjonsnummer
+            </div>
+            <div>
+                <span class="detail-label">Organisasjonsform</span>
+                @if (enhet.organisasjonsform is not null)
+                { @($"{enhet.organisasjonsform.kode} – {enhet.organisasjonsform.beskrivelse}") }
+                else { <span class="muted">–</span> }
+            </div>
+            @if (!string.IsNullOrEmpty(enhet.AktivitetDisplay))
+            {
+                <div style="grid-column: 1 / -1">
+                    <span class="detail-label">Aktivitet</span>
+                    @enhet.AktivitetDisplay
+                </div>
+            }
+            <div>
+                <span class="detail-label">Næringskode</span>
+                @if (enhet.naeringskode1 is not null)
+                { @($"{enhet.naeringskode1.kode} {enhet.naeringskode1.beskrivelse}") }
+                else { <span class="muted">–</span> }
+            </div>
+            @if (enhet.naeringskode2 is not null)
+            {
+                <div>
+                    <span class="detail-label">Næringskode 2</span>
+                    @enhet.naeringskode2.kode @enhet.naeringskode2.beskrivelse
+                </div>
+            }
+            <div>
+                <span class="detail-label">Institusjonell sektorkode</span>
+                @if (enhet.institusjonellSektorkode is not null)
+                { @($"{enhet.institusjonellSektorkode.kode} {enhet.institusjonellSektorkode.beskrivelse}") }
+                else { <span class="muted">–</span> }
+            </div>
+            <div>
+                <span class="detail-label">Ansatte</span>
+                @(enhet.antallAnsatte?.ToString() ?? "–")
+            </div>
+            @if (!string.IsNullOrEmpty(enhet.stiftelsesdato))
+            {
+                <div>
+                    <span class="detail-label">Stiftelsesdato</span>
+                    @FormatDato(enhet.stiftelsesdato)
+                </div>
+            }
+            @if (!string.IsNullOrEmpty(enhet.registreringsdatoEnhetsregisteret))
+            {
+                <div>
+                    <span class="detail-label">Registrert i Enhetsregisteret</span>
+                    @FormatDato(enhet.registreringsdatoEnhetsregisteret)
+                </div>
+            }
+            <div>
+                <span class="detail-label">Status</span>
+                @(enhet.ErAktiv ? "Aktiv"
+                    : enhet.konkurs == true ? "Konkurs"
+                    : enhet.underAvvikling == true ? "Under avvikling"
+                    : $"Slettet {enhet.slettedato}")
+            </div>
+            @if (!string.IsNullOrEmpty(enhet.DisplayAddress))
+            {
+                <div>
+                    <span class="detail-label">Postadresse</span>
+                    @enhet.DisplayAddress
+                </div>
+            }
+            @if (enhet.forretningsadresse is not null && !string.IsNullOrEmpty(enhet.forretningsadresse.poststed))
+            {
+                <div>
+                    <span class="detail-label">Forretningsadresse</span>
+                    @(string.Join(", ", enhet.forretningsadresse.adresse ?? [])),
+                    @enhet.forretningsadresse.postnummer @enhet.forretningsadresse.poststed
+                </div>
+            }
+            @if (enhet.overordnetEnhet is not null)
+            {
+                <div>
+                    <span class="detail-label">Overordnet enhet</span>
+                    @enhet.overordnetEnhet
+                </div>
+            }
+        </div>
+    </div>
+}
+else
+{
+    <div class="expand-body" style="font-size:12px;color:var(--gray-600)">
+        @(feil ?? "Fant ikke organisasjonen i Enhetsregisteret.")
+    </div>
+}
+
+@code {
+    [Parameter] public string Orgnr { get; set; } = "";
+    [Parameter] public bool Vis { get; set; }
+
+    BrregEnhet? enhet;
+    bool laster;
+    string? feil;
+    string? forrigeOrgnr;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (Vis && Orgnr != forrigeOrgnr)
+        {
+            forrigeOrgnr = Orgnr;
+            laster = true;
+            enhet = null;
+            feil = null;
+            StateHasChanged();
+            enhet = await Brreg.GetByOrgnrAsync(Orgnr);
+            feil = Brreg.LastError ?? (enhet is null ? "Fant ikke i Brreg." : null);
+            laster = false;
+        }
+    }
+
+    static string FormatDato(string? iso) =>
+        DateTime.TryParse(iso, out var d)
+            ? d.ToString("d. MMMM yyyy", new System.Globalization.CultureInfo("nb-NO"))
+            : iso ?? "";
+}

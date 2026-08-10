@@ -1,5 +1,6 @@
 @page "/malgrupper/{Id:int}"
 @inject TargetGroupService Svc
+@inject BrregService Brreg
 @inject NavigationManager Nav
 @inject IJSRuntime JS
 
@@ -28,63 +29,442 @@ else
         <span class="muted">Opprettet @group.CreatedAt.ToString("dd. MMMM yyyy")</span>
     </div>
 
-    @if (group.Type == TargetGroupType.Dynamic && criteria is not null)
+    @if (group.Type == TargetGroupType.Dynamic)
     {
         <div class="detail-section">
-            <div class="section-label">Filterregler</div>
-            <div class="chips">
-                @if (!string.IsNullOrEmpty(criteria.OrgForm))
-                {
-                    <span class="chip">Organisasjonsform = @criteria.OrgForm</span>
-                }
-                @if (!string.IsNullOrEmpty(criteria.NacePrefix))
-                {
-                    <span class="chip">Næringskode starter med @criteria.NacePrefix</span>
-                }
+            <div class="section-header" style="margin-bottom:10px">
+                <span class="section-label">Filterregler</span>
+                <button class="btn btn-sm" @onclick="() => editingCriteria = !editingCriteria">
+                    @(editingCriteria ? "Avbryt" : "✎ Rediger regler")
+                </button>
             </div>
-            <button class="btn btn-sm" style="margin-top:8px" @onclick="SyncAsync" disabled="@syncing">
-                @(syncing ? "Synkroniserer..." : "↻ Synkroniser mot Brreg")
-            </button>
+
+            @if (!editingCriteria)
+            {
+                <div class="chips">
+                    @if (!string.IsNullOrEmpty(criteria?.OrgForm))
+                        { <span class="chip">Org.form: @criteria.OrgForm</span> }
+                    @if (!string.IsNullOrEmpty(criteria?.NacePrefix))
+                        { <span class="chip">NACE: @criteria.NacePrefix</span> }
+                    @if (!string.IsNullOrEmpty(criteria?.SektorKode))
+                        { <span class="chip">Sektor: @criteria.SektorKode</span> }
+                    @if (!string.IsNullOrEmpty(criteria?.AktivitetFilter))
+                        { <span class="chip">Aktivitet: @criteria.AktivitetFilter</span> }
+                    @if (!string.IsNullOrEmpty(criteria?.Aktivitet))
+                        { <span class="chip">Status: @AktivitetLabel(criteria.Aktivitet)</span> }
+                    @if (criteria?.IncludeSubUnits == true)
+                        { <span class="chip">Inkl. underenheter</span> }
+                    @if (criteria is null || (string.IsNullOrEmpty(criteria.OrgForm) && string.IsNullOrEmpty(criteria.NacePrefix) && !criteria.IncludeSubUnits))
+                        { <span class="muted">Ingen filterregler — henter alle enheter</span> }
+                </div>
+            }
+            else if (criteria is not null)
+            {
+                <div class="form-row" style="align-items:flex-end;flex-wrap:wrap;gap:12px">
+                    <div class="form-group" style="flex:1;min-width:180px">
+                        <label class="form-label">Organisasjonsform</label>
+                        <select class="form-input" @bind="criteria.OrgForm">
+                            <option value="">Alle</option>
+                            <optgroup label="Offentlig sektor">
+                                <option value="KOMM">KOMM – Kommune</option>
+                                <option value="FYLK">FYLK – Fylkeskommune</option>
+                                <option value="STAT">STAT – Staten</option>
+                                <option value="KF">KF – Kommunalt foretak</option>
+                                <option value="FKF">FKF – Fylkeskommunalt foretak</option>
+                                <option value="IKS">IKS – Interkommunalt selskap</option>
+                            </optgroup>
+                            <optgroup label="Næringsliv">
+                                <option value="AS">AS – Aksjeselskap</option>
+                                <option value="ASA">ASA – Allmennaksjeselskap</option>
+                                <option value="ENK">ENK – Enkeltpersonforetak</option>
+                                <option value="NUF">NUF – Norskregistrert utenlandsk foretak</option>
+                            </optgroup>
+                            <optgroup label="Organisasjoner">
+                                <option value="STI">STI – Stiftelse</option>
+                                <option value="FLI">FLI – Forening/lag/innretning</option>
+                                <option value="SA">SA – Samvirkeforetak</option>
+                            </optgroup>
+                        </select>
+                    </div>
+                    <div class="form-group" style="flex:1;min-width:180px">
+                        <label class="form-label">NACE-kode (prefiks)</label>
+                        <select class="form-input" @bind="naceEditSelection" @bind:after="OnNaceEditSelected">
+                            <option value="">Alle næringskoder</option>
+                            <option value="01">01 – Jordbruk og jakt</option>
+                            <option value="02">02 – Skogbruk</option>
+                            <option value="03">03 – Fiske og akvakultur</option>
+                            <option value="35">35 – Elektrisitets- og gassforsyning</option>
+                            <option value="36">36–39 – Vann, avløp, renovasjon</option>
+                            <option value="41">41–43 – Bygge- og anleggsvirksomhet</option>
+                            <option value="45">45–47 – Varehandel</option>
+                            <option value="49">49–53 – Transport og lagring</option>
+                            <option value="55">55–56 – Overnatting og servering</option>
+                            <option value="58">58–63 – Informasjon og kommunikasjon</option>
+                            <option value="64">64–66 – Finans og forsikring</option>
+                            <option value="69">69–75 – Faglig og vitenskapelig tjenesteyting</option>
+                            <option value="84">84 – Offentlig administrasjon og forsvar</option>
+                            <option value="85">85 – Undervisning</option>
+                            <option value="86">86–88 – Helse- og sosialtjenester</option>
+                            <option value="90">90–93 – Kultur, underholdning og fritid</option>
+                            <option value="94">94–96 – Annen tjenesteyting / organisasjoner</option>
+                            <option value="__custom__">Skriv inn kode manuelt...</option>
+                        </select>
+                        @if (naceEditSelection == "__custom__")
+                        {
+                            <input class="form-input" style="margin-top:6px" @bind="criteria.NacePrefix"
+                                placeholder="F.eks. 86.101" />
+                        }
+                    </div>
+                </div>
+                <div class="form-group" style="max-width:360px">
+                    <label class="form-label">Aktivitet</label>
+                    <input class="form-input" list="aktivitet-list-edit" @bind="criteria.AktivitetFilter"
+                        placeholder="F.eks. Skole, Barnehage..." />
+                    <datalist id="aktivitet-list-edit">
+                        <option value="Skole" /><option value="Barnehage" /><option value="Sykehjem" />
+                        <option value="Helsestasjon" /><option value="Bibliotek" /><option value="Kulturhus" />
+                        <option value="Idrettshall" /><option value="Svømmehall" /><option value="Brannstasjon" />
+                        <option value="Vannverk" /><option value="NAV" /><option value="Avfallshåndtering" />
+                    </datalist>
+                </div>
+                <div class="form-group" style="max-width:360px">
+                    <label class="form-label">Virksomhetsstatus</label>
+                    <select class="form-input" @bind="criteria.Aktivitet">
+                        <option value="aktive">Kun aktive virksomheter</option>
+                        <option value="">Alle (inkl. slettede)</option>
+                        <option value="avvikling">Under avvikling</option>
+                        <option value="konkurs">Konkurs</option>
+                    </select>
+                </div>
+                <div class="form-group" style="max-width:360px">
+                    <label class="form-label">Institusjonell sektorkode</label>
+                    <select class="form-input" @bind="criteria.SektorKode">
+                        <option value="">Alle sektorer</option>
+                        <optgroup label="Offentlig forvaltning">
+                            <option value="1110">1110 – Statsforvaltningen</option>
+                            <option value="1120">1120 – Statsforetak</option>
+                            <option value="1510">1510 – Kommuneforetak</option>
+                            <option value="6100">6100 – Kommuneforvaltningen</option>
+                            <option value="6500">6500 – Fylkeskommuneforvaltningen</option>
+                        </optgroup>
+                        <optgroup label="Næringsliv">
+                            <option value="2100">2100 – Statsaksjeselskaper o.l.</option>
+                            <option value="3100">3100 – Private aksjeselskaper mv.</option>
+                            <option value="3200">3200 – Private personlige foretak mv.</option>
+                        </optgroup>
+                        <optgroup label="Ideell og annet">
+                            <option value="7000">7000 – Ideelle organisasjoner mv.</option>
+                            <option value="8200">8200 – Banker og finansforetak</option>
+                        </optgroup>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+                        <input type="checkbox" @bind="criteria.IncludeSubUnits" style="width:16px;height:16px" />
+                        <span>Inkluder underliggende enheter</span>
+                    </label>
+                </div>
+                <div style="display:flex;gap:8px;margin-top:4px">
+                    <button class="btn btn-primary btn-sm" @onclick="SaveCriteriaAndSyncAsync" disabled="@syncing">
+                        @(syncing ? "Lagrer og synkroniserer..." : "Lagre og synkroniser mot Brreg")
+                    </button>
+                </div>
+            }
+
+            @if (!editingCriteria)
+            {
+                <div style="margin-top:10px">
+                    <button class="btn btn-sm" @onclick="SyncAsync" disabled="@syncing">
+                        @(syncing ? "Synkroniserer..." : "↻ Synkroniser mot Brreg")
+                    </button>
+                </div>
+            }
+            @if (syncError is not null)
+            {
+                <div class="alert-error" style="margin-top:6px"><strong>Feil:</strong> @syncError</div>
+            }
+            @if (!string.IsNullOrEmpty(syncMessage))
+            {
+                <div class="muted" style="margin-top:6px">@syncMessage</div>
+            }
+        </div>
+    }
+
+    @* ── Legg til mottakere (kun statisk) ─────────────────────────────────── *@
+    @if (group.Type == TargetGroupType.Static)
+    {
+        <div class="detail-section">
+            <div class="section-header" style="margin-bottom:10px">
+                <span class="section-label">Legg til mottakere</span>
+                <button class="btn btn-sm" @onclick='() => leggTilMode = leggTilMode == string.Empty ? "search" : string.Empty'>
+                    @(leggTilMode != "" ? "Avbryt" : "+ Legg til")
+                </button>
+            </div>
+
+            @if (leggTilMode == "search")
+            {
+                <div class="form-row" style="margin-bottom:8px">
+                    <input class="form-input" style="flex:1" @bind="addQuery"
+                        @onkeydown="@(async e => { if (e.Key == "Enter") await SøkLeggTilAsync(); })"
+                        placeholder="Søk på navn eller orgnr..." />
+                    <button class="btn" @onclick="SøkLeggTilAsync" disabled="@addSearching">Søk</button>
+                </div>
+                @if (addSearching)
+                {
+                    <div class="loading">Søker...</div>
+                }
+                @* Eksisterende medlemmer som matcher søket — vises alltid øverst *@
+                @if (lokaleTreff.Any())
+                {
+                    <div class="card" style="margin-bottom:4px;border-left:3px solid var(--primary,#0066cc)">
+                        <div style="font-size:.75rem;color:var(--text-muted);padding:.4rem .75rem .2rem;font-weight:600;text-transform:uppercase;letter-spacing:.04em">
+                            Allerede i gruppen
+                        </div>
+                        @foreach (var m in lokaleTreff)
+                        {
+                            var visNavn = m.Visningsnavn ?? m.Recipient.Name;
+                            <div class="card-row small">
+                                <div class="grow">
+                                    <div class="row-name">@visNavn</div>
+                                    <div class="row-sub">
+                                        @m.Recipient.ExternalId · @m.Recipient.OrgForm · @m.Recipient.PostalCity
+                                        @if (m.Visningsnavn is not null) { <text> · Brreg: @m.Recipient.Name</text> }
+                                    </div>
+                                </div>
+                                <span class="muted" style="font-size:12px">Allerede med</span>
+                                <button class="btn btn-sm" title="Legg til samme org med annet visningsnavn (c/o)"
+                                    @onclick="async () => await StartLeggTilMedVisningsnavnFraRecipient(m.Recipient)">+ c/o</button>
+                            </div>
+                        }
+                    </div>
+                }
+                @if (addResults.Any())
+                {
+                    <div class="card" style="margin-bottom:8px">
+                        @foreach (var e in addResults)
+                        {
+                            <div class="card-row small">
+                                <div class="grow">
+                                    <div class="row-name">@e.navn</div>
+                                    <div class="row-sub">@e.organisasjonsnummer · @e.organisasjonsform?.kode · @e.forretningsadresse?.poststed</div>
+                                </div>
+                                <button class="btn btn-sm btn-primary" @onclick="() => LeggTilEnhetAsync(e)">+ Legg til</button>
+                            </div>
+                        }
+                    </div>
+                }
+                @if (addError is not null)
+                {
+                    <div class="alert-error">@addError</div>
+                }
+                @if (coEnhet is not null)
+                {
+                    <div @ref="coSkjemaRef" class="card" style="margin-top:8px;padding:.75rem 1rem;display:flex;flex-direction:column;gap:.5rem">
+                        <div class="row-sub" style="margin-bottom:4px">
+                            Legg til <strong>@coEnhet.navn</strong> (@coEnhet.organisasjonsnummer) med eget visningsnavn:
+                        </div>
+                        <div style="display:flex;gap:.75rem;flex-wrap:wrap">
+                            <div class="form-group" style="flex:1;min-width:180px">
+                                <label class="form-label">Visningsnavn (påkrevd)</label>
+                                <input class="form-input" @bind="coVisningsnavn" placeholder="f.eks. Forum for Barnekonvensjonen" />
+                            </div>
+                            <div class="form-group" style="flex:1;min-width:180px">
+                                <label class="form-label">c/o-adresse (valgfri)</label>
+                                <input class="form-input" @bind="coAdresseInput" placeholder="f.eks. c/o Redd Barna" />
+                            </div>
+                        </div>
+                        <div style="display:flex;gap:.5rem">
+                            <button class="btn btn-primary btn-sm"
+                                disabled="@(string.IsNullOrWhiteSpace(coVisningsnavn))"
+                                @onclick="LeggTilMedVisningsnavnAsync">+ Legg til</button>
+                            <button class="btn btn-sm" @onclick="() => coEnhet = null">Avbryt</button>
+                        </div>
+                    </div>
+                }
+            }
         </div>
     }
 
     <div class="detail-section">
-        <div class="section-label">Mottakere</div>
+        <div class="section-header" style="margin-bottom:10px">
+            <span class="section-label">Mottakere (@group.Members.Count)</span>
+            <div style="display:flex;gap:8px;align-items:center">
+                <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">
+                    <input type="checkbox" @bind="hierarchyView" style="width:14px;height:14px" />
+                    Hierarkisk visning
+                </label>
+            </div>
+        </div>
+
         <div style="margin-bottom:8px">
-            <input class="form-input" style="max-width:280px" @bind="filter" @bind:event="oninput"
+            <input class="form-input" style="max-width:300px" @bind="filter" @bind:event="oninput"
+                @bind:after="ResetPage"
                 placeholder="Filtrer på navn eller orgnr..." />
         </div>
+
         @if (!group.Members.Any())
         {
-            <div class="empty-state">Ingen mottakere ennå.</div>
-        }
-        else
-        {
-            <div class="card">
-                @foreach (var m in Filtered)
+            <div class="empty-state">Ingen mottakere ennå.
+                @if (group.Type == TargetGroupType.Dynamic)
                 {
-                    <div class="card-row small">
+                    <text> Trykk «Synkroniser mot Brreg» for å hente inn.</text>
+                }
+                else
+                {
+                    <text> Bruk «Legg til» over for å søke etter organisasjoner.</text>
+                }
+            </div>
+        }
+        else if (!hierarchyView)
+        {
+            <!-- Flat liste med paginering -->
+            <div class="card">
+                @foreach (var m in PagedItems)
+                {
+                    var erEkspandert = expandedOrg == m.Recipient.ExternalId;
+                    var redigerer = editingMemberId == m.Id;
+                    <div class="card-row small @(erEkspandert ? "expanded" : "")"
+                         style="cursor:pointer"
+                         @onclick="() => { if (!redigerer) ToggleOrgDetalj(m.Recipient.ExternalId); }">
                         <div class="grow">
-                            <div class="row-name">@m.Recipient.Name</div>
+                            <div class="row-name">@(m.Visningsnavn ?? m.Recipient.Name)</div>
                             <div class="row-sub">
+                                @if (m.Visningsnavn is not null)
+                                {
+                                    <text>Brreg: @m.Recipient.Name · </text>
+                                }
                                 @m.Recipient.ExternalId
                                 @if (!string.IsNullOrEmpty(m.Recipient.OrgForm)) { <text> · @m.Recipient.OrgForm</text> }
                                 @if (!string.IsNullOrEmpty(m.Recipient.PostalCity)) { <text> · @m.Recipient.PostalCity</text> }
+                                @if (m.CoAdresse is not null)
+                                {
+                                    <text> · <em>@m.CoAdresse</em></text>
+                                }
                             </div>
                         </div>
                         @if (!m.Recipient.IsActive)
                         {
                             <span class="tag tag-error">Inaktiv</span>
                         }
+                        <button class="btn btn-sm" title="Rediger visningsnavn / c/o"
+                            @onclick:stopPropagation="true"
+                            @onclick="() => StartRedigerVisningsnavn(m)">
+                            ✎
+                        </button>
+                        @if (group.Type == TargetGroupType.Static)
+                        {
+                            <button class="btn btn-sm btn-danger"
+                                @onclick:stopPropagation="true"
+                                @onclick="() => FjernMedlemAsync(m.Id)">
+                                Fjern
+                            </button>
+                        }
+                        @if (group.Type == TargetGroupType.Dynamic && criteria is not null)
+                        {
+                            <button class="btn btn-sm btn-danger" title="Ekskluder fra målgruppen"
+                                @onclick:stopPropagation="true"
+                                @onclick="() => ExcludeAsync(m.Recipient.ExternalId, m.Recipient.Name)">
+                                Ekskluder
+                            </button>
+                        }
+                        <span class="expand-icon">@(erEkspandert ? "▲" : "▼")</span>
                     </div>
+                    @if (redigerer)
+                    {
+                        <div class="expand-body" style="padding:.75rem 1rem;display:flex;flex-direction:column;gap:.5rem"
+                             @onclick:stopPropagation="true">
+                            <div style="display:flex;gap:.75rem;flex-wrap:wrap">
+                                <div class="form-group" style="flex:1;min-width:200px">
+                                    <label class="form-label">Visningsnavn (overstyrer Brreg-navn)</label>
+                                    <input class="form-input" @bind="editVisningsnavn"
+                                           placeholder="@m.Recipient.Name" />
+                                </div>
+                                <div class="form-group" style="flex:1;min-width:200px">
+                                    <label class="form-label">c/o-adresse</label>
+                                    <input class="form-input" @bind="editCoAdresse"
+                                           placeholder="f.eks. c/o Redd Barna" />
+                                </div>
+                            </div>
+                            <div style="display:flex;gap:.5rem">
+                                <button class="btn btn-primary btn-sm"
+                                    @onclick="() => LagreVisningsnavnAsync(m.Id)">Lagre</button>
+                                <button class="btn btn-sm"
+                                    @onclick="AvbrytRedigeringVisningsnavn">Avbryt</button>
+                                @if (m.Visningsnavn is not null || m.CoAdresse is not null)
+                                {
+                                    <button class="btn btn-sm btn-danger"
+                                        @onclick="() => NullstillVisningsnavnAsync(m.Id)">Nullstill</button>
+                                }
+                            </div>
+                        </div>
+                    }
+                    <OrgDetalj Orgnr="@m.Recipient.ExternalId" Vis="@(erEkspandert && !redigerer)" />
                 }
             </div>
-            @if (Filtered.Count < group.Members.Count)
+
+            @if (TotalPages > 1)
             {
-                <div class="muted" style="margin-top:4px">Viser @Filtered.Count av @group.Members.Count</div>
+                <div class="pagination">
+                    <button class="btn btn-sm" disabled="@(currentPage == 0)" @onclick="() => currentPage--">←</button>
+                    <span class="muted">Side @(currentPage + 1) av @TotalPages (@Filtered.Count treff)</span>
+                    <button class="btn btn-sm" disabled="@(currentPage >= TotalPages - 1)" @onclick="() => currentPage++">→</button>
+                </div>
+            }
+            else if (!string.IsNullOrWhiteSpace(filter))
+            {
+                <div class="muted" style="margin-top:4px">@Filtered.Count treff</div>
+            }
+        }
+        else
+        {
+            <!-- Hierarkisk visning: grupper på overordnet enhet -->
+            @foreach (var node in HierarchyNodes)
+            {
+                <div class="hierarchy-node">
+                    <div class="card-row small hierarchy-parent" @onclick="() => ToggleNode(node.ParentOrgnr)">
+                        <span class="expand-icon">@(expandedNodes.Contains(node.ParentOrgnr) ? "▾" : "▸")</span>
+                        <div class="grow">
+                            <div class="row-name">@node.ParentName</div>
+                            <div class="row-sub">@node.ParentOrgnr · @node.Children.Count enhet(er)</div>
+                        </div>
+                    </div>
+                    @if (expandedNodes.Contains(node.ParentOrgnr))
+                    {
+                        @foreach (var m in node.Children)
+                        {
+                            <div class="card-row small hierarchy-child">
+                                <div class="grow" style="padding-left:24px">
+                                    <div class="row-name">@m.Recipient.Name</div>
+                                    <div class="row-sub">@m.Recipient.ExternalId · @m.Recipient.OrgForm · @m.Recipient.PostalCity</div>
+                                </div>
+                            </div>
+                        }
+                    }
+                </div>
             }
         }
     </div>
+
+    @if (group.Type == TargetGroupType.Dynamic && criteria is not null && criteria.ExcludedOrgnrs.Count > 0)
+    {
+        <div class="detail-section">
+            <div class="section-header" style="margin-bottom:10px">
+                <span class="section-label">Ekskluderte enheter (@criteria.ExcludedOrgnrs.Count)</span>
+            </div>
+            <div class="card">
+                @foreach (var orgnr in criteria.ExcludedOrgnrs.ToList())
+                {
+                    <div class="card-row small">
+                        <div class="grow">
+                            <div class="row-name">@(excludedNames.GetValueOrDefault(orgnr, orgnr))</div>
+                            <div class="row-sub">@orgnr</div>
+                        </div>
+                        <button class="btn btn-sm" @onclick="() => ReIncludeAsync(orgnr)">↩ Inkluder igjen</button>
+                    </div>
+                }
+            </div>
+        </div>
+    }
 
     <div class="detail-section">
         <div class="section-label">API-endepunkt</div>
@@ -97,28 +477,277 @@ else
     [Parameter] public int Id { get; set; }
     TargetGroup? group;
     DynamicCriteria? criteria;
-    bool syncing;
+    bool syncing, editingCriteria, hierarchyView;
     string filter = "";
+    string syncMessage = "";
+    string? syncError;
+    string naceEditSelection = "";
+    int currentPage = 0;
+    const int PageSize = 50;
+    HashSet<string> expandedNodes = [];
+    Dictionary<string, string> excludedNames = [];
+
+    // Statisk gruppe — legg til
+    string leggTilMode = "";
+    string addQuery = "";
+    bool addSearching;
+    List<BrregEnhet> addResults = [];
+    List<TargetGroupMember> lokaleTreff = [];
+    string? addError;
+
+    // c/o-duplisering
+    BrregEnhet? coEnhet;
+    string coVisningsnavn = "";
+    string coAdresseInput = "";
+    ElementReference coSkjemaRef;
+
+    // Org-detalj ekspandering
+    string? expandedOrg;
+    void ToggleOrgDetalj(string orgnr) =>
+        expandedOrg = expandedOrg == orgnr ? null : orgnr;
+
+    // Visningsnavn-redigering
+    int? editingMemberId;
+    string editVisningsnavn = "";
+    string editCoAdresse = "";
+
+    void StartRedigerVisningsnavn(TargetGroupMember m)
+    {
+        editingMemberId = m.Id;
+        editVisningsnavn = m.Visningsnavn ?? "";
+        editCoAdresse = m.CoAdresse ?? "";
+        expandedOrg = null;
+    }
+
+    void AvbrytRedigeringVisningsnavn()
+    {
+        editingMemberId = null;
+        editVisningsnavn = "";
+        editCoAdresse = "";
+    }
+
+    async Task LagreVisningsnavnAsync(int tgmId)
+    {
+        await Svc.SetVisningsnavnAsync(tgmId, editVisningsnavn, editCoAdresse);
+        group = await Svc.GetAsync(Id);
+        AvbrytRedigeringVisningsnavn();
+    }
+
+    async Task NullstillVisningsnavnAsync(int tgmId)
+    {
+        await Svc.SetVisningsnavnAsync(tgmId, null, null);
+        group = await Svc.GetAsync(Id);
+        AvbrytRedigeringVisningsnavn();
+    }
 
     List<TargetGroupMember> Filtered =>
         string.IsNullOrWhiteSpace(filter) ? group!.Members :
         group!.Members.Where(m =>
             m.Recipient.Name.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
-            m.Recipient.ExternalId.Contains(filter)).ToList();
+            m.Recipient.ExternalId.Contains(filter, StringComparison.OrdinalIgnoreCase)).ToList();
+
+    List<TargetGroupMember> PagedItems =>
+        Filtered.Skip(currentPage * PageSize).Take(PageSize).ToList();
+
+    int TotalPages => (int)Math.Ceiling(Filtered.Count / (double)PageSize);
+
+    void ResetPage() => currentPage = 0;
+
+    void OnNaceEditSelected()
+    {
+        if (criteria is not null && naceEditSelection != "__custom__")
+            criteria.NacePrefix = naceEditSelection;
+    }
+
+    void ToggleNode(string orgnr)
+    {
+        if (!expandedNodes.Add(orgnr)) expandedNodes.Remove(orgnr);
+    }
+
+    record HierarchyNode(string ParentOrgnr, string ParentName, List<TargetGroupMember> Children);
+
+    List<HierarchyNode> HierarchyNodes
+    {
+        get
+        {
+            var members = string.IsNullOrWhiteSpace(filter) ? group!.Members
+                : group!.Members.Where(m =>
+                    m.Recipient.Name.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
+                    m.Recipient.ExternalId.Contains(filter, StringComparison.OrdinalIgnoreCase)).ToList();
+
+            var withParent = members
+                .GroupBy(m => m.Recipient.PostalAddress ?? m.Recipient.ExternalId[..Math.Min(6, m.Recipient.ExternalId.Length)])
+                .Select(g => new HierarchyNode(g.Key, g.First().Recipient.Name, g.ToList()))
+                .ToList();
+
+            return withParent;
+        }
+    }
 
     protected override async Task OnInitializedAsync()
     {
         group = await Svc.GetAsync(Id);
-        if (group is not null) criteria = Svc.GetCriteria(group);
+        if (group is not null)
+        {
+            criteria = Svc.GetCriteria(group) ?? new DynamicCriteria();
+            naceEditSelection = criteria.NacePrefix ?? "";
+            foreach (var orgnr in criteria.ExcludedOrgnrs)
+                excludedNames.TryAdd(orgnr, orgnr);
+        }
+    }
+
+    async Task SøkLeggTilAsync()
+    {
+        if (string.IsNullOrWhiteSpace(addQuery)) return;
+        addSearching = true;
+        addError = null;
+        coEnhet = null;
+
+        // Søk lokalt i eksisterende medlemmer (vises alltid, uavhengig av Brreg-sortering)
+        var q = addQuery.Trim();
+        var lokaleOrgnr = new HashSet<string>();
+        if (!string.IsNullOrWhiteSpace(q) && group is not null)
+        {
+            lokaleTreff = group.Members.Where(m =>
+                m.Recipient.Name.Contains(q, StringComparison.OrdinalIgnoreCase) ||
+                m.Recipient.ExternalId.Contains(q, StringComparison.OrdinalIgnoreCase) ||
+                (m.Visningsnavn?.Contains(q, StringComparison.OrdinalIgnoreCase) == true))
+                .ToList();
+            lokaleOrgnr = lokaleTreff.Select(m => m.Recipient.ExternalId).ToHashSet();
+        }
+        else
+        {
+            lokaleTreff = [];
+        }
+
+        // Søk i Brreg — filtrer bort orgnr som allerede er i lokale treff
+        var brregResultater = await Brreg.SearchAsync(addQuery, size: 50);
+        addResults = brregResultater.Where(e => !lokaleOrgnr.Contains(e.organisasjonsnummer)).ToList();
+        addError = Brreg.LastError;
+        addSearching = false;
+    }
+
+    async Task LeggTilEnhetAsync(BrregEnhet e)
+    {
+        if (group is null) return;
+        var recipient = TargetGroupService.BrregEnhetToRecipient(e);
+        await Svc.AddMembersAsync(group.Id, [recipient]);
+        group = await Svc.GetAsync(Id);
+        addResults = addResults.Where(r => r.organisasjonsnummer != e.organisasjonsnummer).ToList();
+    }
+
+    async Task FjernMedlemAsync(int memberId)
+    {
+        if (group is null) return;
+        await Svc.RemoveMemberAsync(memberId);
+        group = await Svc.GetAsync(Id);
+        ResetPage();
+    }
+
+    async Task StartLeggTilMedVisningsnavn(BrregEnhet e)
+    {
+        coEnhet = e;
+        coVisningsnavn = "";
+        coAdresseInput = $"c/o {e.navn}";
+        await ScrollTilCoSkjema();
+    }
+
+    /// Starter c/o-flyten fra et eksisterende Recipient (lokalt søketreff)
+    async Task StartLeggTilMedVisningsnavnFraRecipient(Recipient r)
+    {
+        coEnhet = new BrregEnhet
+        {
+            organisasjonsnummer = r.ExternalId,
+            navn = r.Name,
+            organisasjonsform = r.OrgForm is not null ? new BrregOrganisasjonsform { kode = r.OrgForm, beskrivelse = "" } : null
+        };
+        coVisningsnavn = "";
+        coAdresseInput = $"c/o {r.Name}";
+        await ScrollTilCoSkjema();
+    }
+
+    async Task ScrollTilCoSkjema()
+    {
+        await InvokeAsync(StateHasChanged);
+        try { await JS.InvokeVoidAsync("scrollIntoView", coSkjemaRef); }
+        catch { /* ignore if element not yet rendered */ }
+    }
+
+    async Task LeggTilMedVisningsnavnAsync()
+    {
+        if (group is null || coEnhet is null || string.IsNullOrWhiteSpace(coVisningsnavn)) return;
+        await Svc.AddMedVisningsnavnAsync(group.Id, coEnhet, coVisningsnavn, coAdresseInput);
+        group = await Svc.GetAsync(Id);
+        coEnhet = null;
+        coVisningsnavn = "";
+        coAdresseInput = "";
+    }
+
+    async Task ExcludeAsync(string orgnr, string name)
+    {
+        if (criteria is null) return;
+        if (!criteria.ExcludedOrgnrs.Contains(orgnr))
+        {
+            criteria.ExcludedOrgnrs.Add(orgnr);
+            excludedNames[orgnr] = name;
+        }
+        await PersistCriteriaAsync();
+        group!.Members.RemoveAll(m => m.Recipient.ExternalId == orgnr);
+        ResetPage();
+    }
+
+    async Task ReIncludeAsync(string orgnr)
+    {
+        if (criteria is null) return;
+        criteria.ExcludedOrgnrs.Remove(orgnr);
+        excludedNames.Remove(orgnr);
+        await PersistCriteriaAsync();
+        await SyncAsync();
+    }
+
+    async Task PersistCriteriaAsync()
+    {
+        if (criteria is null || group is null) return;
+        group.DynamicCriteriaJson = System.Text.Json.JsonSerializer.Serialize(criteria);
+        await Svc.SaveCriteriaAsync(group);
     }
 
     async Task SyncAsync()
     {
         syncing = true;
+        syncMessage = "";
+        syncError = null;
+        var before = group!.Members.Count;
         await Svc.SyncDynamicGroupAsync(group!);
+        syncError = Brreg.LastError;
         group = await Svc.GetAsync(Id);
+        var after = group!.Members.Count;
+        syncMessage = syncError is null
+            ? $"Sist synkronisert: {DateTime.Now:HH:mm} — {after} mottakere ({(after - before >= 0 ? "+" : "")}{after - before})"
+            : "";
         syncing = false;
     }
+
+    async Task SaveCriteriaAndSyncAsync()
+    {
+        if (criteria is null) return;
+        syncing = true;
+        editingCriteria = false;
+        await PersistCriteriaAsync();
+        await Svc.SyncDynamicGroupAsync(group!);
+        group = await Svc.GetAsync(Id);
+        criteria = Svc.GetCriteria(group!);
+        syncMessage = $"Lagret og synkronisert: {DateTime.Now:HH:mm} — {group!.Members.Count} mottakere";
+        syncing = false;
+    }
+
+    static string AktivitetLabel(string a) => a switch
+    {
+        "aktive" => "Kun aktive",
+        "avvikling" => "Under avvikling",
+        "konkurs" => "Konkurs",
+        _ => "Alle"
+    };
 
     async Task ExportJsonAsync()
     {

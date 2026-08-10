@@ -1,0 +1,50 @@
+@page "/adresselister/ny"
+@inject AdresselisteService Svc
+@inject TargetGroupService TgSvc
+@inject NavigationManager Nav
+
+<PageTitle>Ny adresseliste — Kontaktlisteregisteret</PageTitle>
+
+<div class="page-header">
+    <a href="adresselister" class="btn btn-sm">← Tilbake</a>
+    <h1>Ny adresseliste</h1>
+</div>
+
+<div class="wizard-card">
+    <div class="form-group">
+        <label class="form-label">Tittel</label>
+        <input class="form-input" @bind="tittel"
+            placeholder="F.eks. Høring av NOU 2026:2 Politikk for nye generasjoner" />
+    </div>
+    <div class="form-group">
+        <label class="form-label">Beskrivelse <span class="muted">(valgfri)</span></label>
+        <textarea class="form-input" rows="3" @bind="beskrivelse"
+            placeholder="Kontekst, frist, avsender..."></textarea>
+    </div>
+
+    @if (error is not null)
+    {
+        <div class="alert-error">@error</div>
+    }
+
+    <div style="display:flex;gap:8px;margin-top:8px">
+        <button class="btn btn-primary" @onclick="CreateAsync" disabled="@saving">
+            @(saving ? "Oppretter..." : "Opprett adresseliste")
+        </button>
+    </div>
+</div>
+
+@code {
+    string tittel = "", beskrivelse = "";
+    string? error;
+    bool saving;
+
+    async Task CreateAsync()
+    {
+        if (string.IsNullOrWhiteSpace(tittel)) { error = "Tittel er påkrevd."; return; }
+        saving = true;
+        error = null;
+        var liste = await Svc.CreateAsync(tittel.Trim(), beskrivelse.Trim().Length > 0 ? beskrivelse.Trim() : null);
+        Nav.NavigateTo($"/adresselister/{liste.Id}");
+    }
+}

@@ -6,3 +6,7 @@ window.downloadFile = (filename, mimeType, base64) => {
     link.click();
     document.body.removeChild(link);
 };
+
+window.scrollIntoView = (element) => {
+    if (element) element.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+};

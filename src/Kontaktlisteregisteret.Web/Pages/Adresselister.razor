@@ -1,0 +1,73 @@
+@page "/adresselister"
+@inject AdresselisteService Svc
+@inject NavigationManager Nav
+@inject TargetGroupService TgSvc
+
+<PageTitle>Adresselister — Kontaktlisteregisteret</PageTitle>
+
+<div class="page-header">
+    <h1>Adresselister</h1>
+    <a href="adresselister/ny" class="btn btn-primary">+ Ny adresseliste</a>
+</div>
+
+@if (!lister.Any())
+{
+    <div class="empty-state">
+        Ingen adresselister ennå.
+        <a href="adresselister/ny" class="btn btn-primary" style="margin-top:12px">Opprett din første</a>
+    </div>
+}
+else
+{
+    <div class="card">
+        @foreach (var a in lister)
+        {
+            var url = "adresselister/" + a.Id;
+            <div class="card-row" @onclick="() => Nav.NavigateTo(url)" style="cursor:pointer">
+                <div class="grow">
+                    <div class="row-name">@a.Tittel</div>
+                    <div class="row-sub">
+                        @(a.Mottakere.Count) mottakere ·
+                        @if (a.LåstAt.HasValue)
+                        { <text>Låst @a.LåstAt.Value.ToString("dd. MMM yyyy")</text> }
+                        else
+                        { <text>Opprettet @a.OpprettetAt.ToString("dd. MMM yyyy")</text> }
+                        @if (!string.IsNullOrEmpty(a.OpprettetAv))
+                        { <text> · @a.OpprettetAv</text> }
+                    </div>
+                </div>
+                <button class="btn btn-sm" @onclick:stopPropagation="true"
+                    @onclick="() => KopierAsync(a.Id)">⎘ Kopier</button>
+                <span class="tag @StatusTagClass(a.Status)">@StatusLabel(a.Status)</span>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    List<Adresseliste> lister = [];
+
+    protected override async Task OnInitializedAsync() =>
+        lister = await Svc.GetAllAsync();
+
+    async Task KopierAsync(int id)
+    {
+        var kopi = await Svc.KopierAsync(id);
+        Nav.NavigateTo($"/adresselister/{kopi.Id}");
+    }
+
+    static string StatusLabel(AdresselisteStatus s) => s switch
+    {
+        AdresselisteStatus.Utkast => "Utkast",
+        AdresselisteStatus.Klar   => "Klar",
+        AdresselisteStatus.Låst   => "Låst",
+        _ => s.ToString()
+    };
+
+    static string StatusTagClass(AdresselisteStatus s) => s switch
+    {
+        AdresselisteStatus.Låst   => "tag-static",
+        AdresselisteStatus.Klar   => "tag-dynamic",
+        _                          => ""
+    };
+}
