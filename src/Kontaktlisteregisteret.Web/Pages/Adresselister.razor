@@ -7,14 +7,14 @@
 
 <div class="page-header">
     <h1>Adresselister</h1>
-    <a href="adresselister/ny" class="btn btn-primary">+ Ny adresseliste</a>
+    <a href="/adresselister/ny" class="btn btn-primary">+ Ny adresseliste</a>
 </div>
 
 @if (!lister.Any())
 {
     <div class="empty-state">
         Ingen adresselister ennå.
-        <a href="adresselister/ny" class="btn btn-primary" style="margin-top:12px">Opprett din første</a>
+        <a href="/adresselister/ny" class="btn btn-primary" style="margin-top:12px">Opprett din første</a>
     </div>
 }
 else

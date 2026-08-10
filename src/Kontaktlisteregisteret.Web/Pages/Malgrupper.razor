@@ -6,7 +6,7 @@
 
 <div class="page-header">
     <h1>Målgrupper</h1>
-    <a href="malgrupper/ny" class="btn btn-primary">+ Ny målgruppe</a>
+    <a href="/malgrupper/ny" class="btn btn-primary">+ Ny målgruppe</a>
 </div>
 
 @if (loading)
@@ -17,7 +17,7 @@ else if (!groups.Any())
 {
     <div class="empty-state">
         <p>Ingen målgrupper er opprettet ennå.</p>
-        <a href="malgrupper/ny" class="btn btn-primary">Opprett din første målgruppe</a>
+        <a href="/malgrupper/ny" class="btn btn-primary">Opprett din første målgruppe</a>
     </div>
 }
 else
