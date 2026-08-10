@@ -219,7 +219,8 @@ textarea.form-input { resize: vertical; }
   justify-content: space-between;
 }
 
-.type-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.type-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; min-width: 0; }
+.type-grid .type-option { min-width: 0; }
 .type-option {
   border: 0.5px solid var(--gray-200);
   border-radius: var(--radius-md);
