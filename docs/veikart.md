@@ -46,13 +46,14 @@ PoC med kjernefunksjonalitet for målgrupper, adresselister og abonnementslister
 
 | # | Beskrivelse |
 |---|---|
-| T-01 | Ingen tester — trenger enhetstester for `AdresselisteService`, `BrregService`, dedup-logikk |
+| T-01 | Ingen tester — trenger enhetstester for `AdresselisteService`, `BrregService`, dedup-logikk. Forutsetter at tjenestene først får interface-abstraksjoner (`IAdresselisteService` o.l.) for enkel mocking |
 | T-02 | `EnsureCreated` — databasen må slettes ved skjemaendringer; bytt til Migrations (se B-08) |
 | T-03 | Ingen feilgrenser i UI — ukjente feil vises bare som tom side |
 | T-04 | BrregService cacher ikke — samme søk gjøres på nytt ved hver navigasjon |
 | T-05 | SQLitePCLRaw.lib.e_sqlite3 har kjent sårbarhet (transitiv avhengighet fra EF Core 10) |
 | T-06 | `SeedAsync` (~300 linjer hardkodet data) ligger i `Program.cs` — flytt til `Data/SeedData.cs` |
 | T-07 | API-endepunkter (~140 linjer) ligger i `Program.cs` — flytt til egen `ApiEndpoints`-klasse med extension-metode på `IEndpointRouteBuilder` |
+| T-08 | Ingen OpenAPI/Swagger — legg til `Microsoft.AspNetCore.OpenApi` (innebygd i .NET 10) for maskinlesbar API-spec og enklere klientgenerering hos konsumenter |
 
 ---
 
