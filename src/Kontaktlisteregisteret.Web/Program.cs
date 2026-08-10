@@ -30,7 +30,8 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     db.Database.EnsureCreated();
-    await SeedAsync(db);
+    if (!app.Configuration.GetValue<bool>("SkipSeed"))
+        await SeedAsync(db);
 }
 
 // ── API v1 ────────────────────────────────────────────────────────────────────
@@ -488,3 +489,6 @@ static async Task SeedAsync(AppDbContext db)
 }
 
 record AbonnentRegistrerRequest(string Epost);
+
+// Eksponerer Program-klassen for WebApplicationFactory i testprosjektet
+public partial class Program { }
