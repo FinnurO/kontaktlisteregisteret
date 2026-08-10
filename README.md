@@ -23,7 +23,8 @@ Klikk **Code → Codespaces → Create codespace**. Devcontaineren starter appen
 
 ## Funksjonalitet
 
-Se [docs/funksjonalitet.md](docs/funksjonalitet.md) for fullstendig beskrivelse.
+Se [docs/funksjonalitet.md](docs/funksjonalitet.md) for fullstendig beskrivelse av UI-funksjonalitet.  
+Se [docs/api.md](docs/api.md) for alle API-endepunkter og interne tjenester.
 
 Kort oppsummert:
 - **Målgrupper** — dynamiske (Brreg-filterregler) og statiske (søk, opplasting, manuelt)
