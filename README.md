@@ -1,57 +1,64 @@
 # Kontaktlisteregisteret
 
-A registry for managing organizations and persons in target groups for hearings, surveys, and outreach. Produces standardized address lists consumed by other systems via API.
+Register for å administrere organisasjoner og personer i målgrupper for høringer, undersøkelser og utsendinger. Produserer standardiserte adresselister som konsumeres av andre systemer via API.
 
 ## Status
 
-Early-stage PoC — no authentication, SQLite storage, Norwegian reference implementation.
+Tidlig PoC — ingen autentisering, SQLite-lagring, norsk referanseimplementasjon.
 
-## Features (PoC)
+## Kom i gang
 
-- **Target groups** — dynamic (Brreg filter rules) and static (upload or search)
-- **Live Brreg search** — search the Norwegian Business Registry by name or org number
-- **Hierarchy browser** — explore parent/child organization relationships from Brreg
-- **Org number upload** — paste a list of org numbers, validate against Brreg, import valid entries
-- **Export** — download target group as JSON or CSV
-- **SQLite** — zero-config local storage
-
-## Architecture
-
-Ports and Adapters (hexagonal). Norwegian services are swappable adapters behind defined interfaces, enabling reuse in other countries.
-
-```
-src/
-└── Kontaktlisteregisteret.Web/   # Blazor Server app (PoC: all-in-one)
-    ├── Data/                     # EF Core + SQLite (domain models)
-    ├── Services/                 # BrregService (IEntityRegistry adapter)
-    │                               TargetGroupService (domain logic)
-    ├── Pages/                    # Blazor pages
-    └── wwwroot/                  # Static assets
-```
-
-## Running locally
-
-**Prerequisites:** [.NET 8 SDK](https://dotnet.microsoft.com/download)
+**Forutsetninger:** [.NET 10 SDK](https://dotnet.microsoft.com/download)
 
 ```bash
 cd src/Kontaktlisteregisteret.Web
-dotnet run
+dotnet run --urls http://localhost:5100
 ```
 
-Open [http://localhost:5000](http://localhost:5000)
+Åpne [http://localhost:5100](http://localhost:5100)
 
-## Running in GitHub Codespaces
+## Kjøre i GitHub Codespaces
 
-Click **Code → Codespaces → Create codespace**. The devcontainer starts the app automatically on port 5000.
+Klikk **Code → Codespaces → Create codespace**. Devcontaineren starter appen automatisk.
 
-## Adapters — Norwegian reference implementation
+## Funksjonalitet
 
-| Port | Adapter | Service |
+Se [docs/funksjonalitet.md](docs/funksjonalitet.md) for fullstendig beskrivelse.
+
+Kort oppsummert:
+- **Målgrupper** — dynamiske (Brreg-filterregler) og statiske (søk, opplasting, manuelt)
+- **Adresselister** — koble sammen målgrupper og abonnementslister, lås til snapshot, eksporter
+- **Abonnementslister** — administrer e-postabonnenter, koble til adresselister
+- **Brreg-integrasjon** — søk, hierarkivisning, massevalidering av orgnr
+- **c/o-støtte** — samme organisasjon kan ligge i en målgruppe med ulikt visningsnavn
+
+## Arkitektur
+
+Ports and Adapters (heksagonal). Norske tjenester er utskiftbare adaptere bak definerte grensesnitt.
+
+```
+src/
+└── Kontaktlisteregisteret.Web/   # Blazor Server (.NET 10)
+    ├── Data/                     # EF Core + SQLite (domenemodellar)
+    ├── Services/                 # BrregService, TargetGroupService,
+    │                             # AdresselisteService, AbonnementslisteService
+    ├── Pages/                    # Blazor-sider
+    └── wwwroot/                  # Statiske ressursar
+```
+
+| Port | Adapter | Teneste |
 |---|---|---|
 | `IEntityRegistry` | `BrregService` | data.brreg.no |
-| `IIdentityProvider` | *(not yet implemented)* | Ansattporten |
-| `IMachineAuthProvider` | *(not yet implemented)* | Maskinporten |
+| `IIdentityProvider` | *(ikkje implementert)* | Ansattporten |
+| `IMachineAuthProvider` | *(ikkje implementert)* | Maskinporten |
 
-## License
+## Dokumentasjon
+
+| Dokument | Innhald |
+|---|---|
+| [docs/funksjonalitet.md](docs/funksjonalitet.md) | Detaljert skildring av alle funksjonar |
+| [docs/veikart.md](docs/veikart.md) | Backlog og prioriteringar |
+
+## Lisens
 
 MIT
