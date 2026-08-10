@@ -27,15 +27,15 @@
             <div class="form-group">
                 <label class="form-label">Type</label>
                 <div class="type-grid">
-                    <div class="type-option @(type == "dynamic" ? "selected" : "")" @onclick="@(() => VelgType("dynamic"))">
+                    <div class="type-option @(type == "dynamic" ? "selected" : "")" @onclick="VelgDynamisk">
                         <div class="type-title">Dynamisk</div>
                         <div class="type-desc">Regler mot Brreg — oppdateres ved synkronisering</div>
                     </div>
-                    <div class="type-option @(type == "static-orgnr" ? "selected" : "")" @onclick="@(() => VelgType("static-orgnr"))">
+                    <div class="type-option @(type == "static-orgnr" ? "selected" : "")" @onclick="VelgStatiskOrgnr">
                         <div class="type-title">Statisk — orgnr-liste</div>
                         <div class="type-desc">Lim inn organisasjonsnummer, valideres mot Brreg</div>
                     </div>
-                    <div class="type-option @(type == "static-search" ? "selected" : "")" @onclick="@(() => VelgType("static-search"))">
+                    <div class="type-option @(type == "static-search" ? "selected" : "")" @onclick="VelgStatiskSok">
                         <div class="type-title">Statisk — søk og velg</div>
                         <div class="type-desc">Søk i Brreg og velg enkeltvis</div>
                     </div>
@@ -404,10 +404,9 @@
     HashSet<string> selectedOrgnrs = [];
     Dictionary<string, BrregEnhet> selectedEnheter = [];
 
-    void VelgType(string valgtType)
-    {
-        type = valgtType;
-    }
+    void VelgDynamisk()     { type = "dynamic"; }
+    void VelgStatiskOrgnr() { type = "static-orgnr"; }
+    void VelgStatiskSok()   { type = "static-search"; }
 
     void OnNaceSelected()
     {
