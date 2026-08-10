@@ -399,12 +399,14 @@
             </div>
 
             <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center">
-                <button class="btn btn-primary" @onclick="SearchBrregAsync" disabled="@searching">
+                <button class="btn btn-primary" @onclick="() => SearchBrregAsync(0)" disabled="@searching">
                     @(searching ? "Søker..." : "Søk i Brreg")
                 </button>
                 @if (searchResults.Any())
                 {
-                    <span class="muted" style="font-size:13px">@searchResults.Count treff — velg enkeltvis nedenfor</span>
+                    <span class="muted" style="font-size:13px">
+                        @searchTotalElements treff · side @(searchPage + 1) av @searchTotalPages — velg enkeltvis nedenfor
+                    </span>
                 }
                 @if (searchError is not null)
                 {
@@ -438,6 +440,18 @@
                         </div>
                     }
                 </div>
+                @if (searchTotalPages > 1)
+                {
+                    <div style="display:flex;gap:8px;align-items:center;margin-top:8px">
+                        <button class="btn btn-sm" @onclick="() => SearchBrregAsync(searchPage - 1)" disabled="@(searchPage == 0)">
+                            ← Forrige
+                        </button>
+                        <span class="muted" style="font-size:13px">Side @(searchPage + 1) av @searchTotalPages</span>
+                        <button class="btn btn-sm" @onclick="() => SearchBrregAsync(searchPage + 1)" disabled="@(searchPage >= searchTotalPages - 1)">
+                            Neste →
+                        </button>
+                    </div>
+                }
             }
 
             @if (selectedOrgnrs.Any())
@@ -542,6 +556,9 @@
     List<BrregEnhet> searchResults = [];
     HashSet<string> selectedOrgnrs = [];
     Dictionary<string, BrregEnhet> selectedEnheter = [];
+    int searchPage = 0;
+    int searchTotalPages = 1;
+    int searchTotalElements = 0;
 
 
     void VelgDynamisk()     { type = "dynamic"; }
@@ -591,17 +608,21 @@
         validating = false;
     }
 
-    async Task SearchBrregAsync()
+    async Task SearchBrregAsync(int page = 0)
     {
         searching = true;
         searchError = null;
+        searchPage = page;
         searchResults = await Brreg.SearchAsync(
             searchQuery,
             criteria.OrgForm,
             criteria.NacePrefix,
             criteria.SektorKode,
-            size: 200);
+            size: 200,
+            page: page);
         searchError = Brreg.LastError;
+        searchTotalElements = Brreg.LastTotalElements;
+        searchTotalPages = Brreg.LastTotalPages;
         searching = false;
     }
 

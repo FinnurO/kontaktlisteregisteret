@@ -46,13 +46,20 @@ public class BrregService(HttpClient http, ILogger<BrregService> logger)
         }
     }
 
+    public int LastTotalElements { get; private set; }
+    public int LastTotalPages { get; private set; }
+
     public async Task<List<BrregEnhet>> SearchAsync(string query, string? orgform = null,
-        string? nacePrefix = null, string? sektorKode = null, int size = 20)
+        string? nacePrefix = null, string? sektorKode = null, int size = 20, int page = 0)
     {
         LastError = null;
-        var url = $"{BaseUrl}/enheter?size={size}&{BuildParams(query, orgform, nacePrefix, sektorKode)}";
+        LastTotalElements = 0;
+        LastTotalPages = 1;
+        var url = $"{BaseUrl}/enheter?size={size}&page={page}&{BuildParams(query, orgform, nacePrefix, sektorKode)}";
         var (result, error) = await FetchAsync<BrregSearchResult>(url);
         LastError = error;
+        LastTotalElements = result?.page?.totalElements ?? 0;
+        LastTotalPages = result?.page?.totalPages ?? 1;
         return result?.Embedded?.enheter ?? [];
     }
 
