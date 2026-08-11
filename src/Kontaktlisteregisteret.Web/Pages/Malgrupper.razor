@@ -9,6 +9,11 @@
 
 <div class="page-header">
     <h1>Målgrupper</h1>
+    <select class="form-input" style="width:auto;min-width:160px" @bind="sortOrder" @bind:after="SorterListe">
+        <option value="nyeste">Nyeste først</option>
+        <option value="alfabet">Alfabetisk</option>
+        <option value="antall">Flest mottakere</option>
+    </select>
     <a href="@($"/{Orgnr}/malgrupper/ny")" class="btn btn-primary">+ Ny målgruppe</a>
 </div>
 
@@ -53,6 +58,13 @@ else
 
     List<TargetGroup> groups = [];
     bool loading = true;
+    string sortOrder = "nyeste";
+
+    void SorterListe() => groups = sortOrder switch {
+        "alfabet" => [.. groups.OrderBy(g => g.Name)],
+        "antall"  => [.. groups.OrderByDescending(g => g.Members.Count)],
+        _         => [.. groups.OrderByDescending(g => g.CreatedAt)]
+    };
 
     protected override async Task OnParametersSetAsync()
     {
@@ -61,6 +73,7 @@ else
         if (Ctx.Current is not null)
             groups = await Svc.GetAllAsync(Ctx.Current.Id);
         loading = false;
+        SorterListe();
     }
 
     async Task KopierAsync(int id)

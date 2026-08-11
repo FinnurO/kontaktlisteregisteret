@@ -9,6 +9,11 @@
 
 <div class="page-header">
     <h1>Abonnementslister</h1>
+    <select class="form-input" style="width:auto;min-width:160px" @bind="sortOrder" @bind:after="SorterListe">
+        <option value="nyeste">Nyeste først</option>
+        <option value="alfabet">Alfabetisk</option>
+        <option value="antall">Flest mottakere</option>
+    </select>
     <button class="btn btn-primary" @onclick="() => visOpprettSkjema = !visOpprettSkjema">
         @(visOpprettSkjema ? "Avbryt" : "+ Ny abonnementsliste")
     </button>
@@ -93,12 +98,20 @@ else
     string nyBeskrivelse = string.Empty;
     string opprettFeil = string.Empty;
     bool oppretter;
+    string sortOrder = "nyeste";
+
+    void SorterListe() => lister = sortOrder switch {
+        "alfabet" => [.. lister.OrderBy(l => l.Navn)],
+        "antall"  => [.. lister.OrderByDescending(l => l.Abonnenter.Count)],
+        _         => [.. lister.OrderByDescending(l => l.OpprettetAt)]
+    };
 
     protected override async Task OnParametersSetAsync()
     {
         await Ctx.LoadAsync(Orgnr);
         if (Ctx.Current is not null)
             lister = await Svc.GetAllAsync(Ctx.Current.Id);
+        SorterListe();
     }
 
     async Task OpprettAsync()
