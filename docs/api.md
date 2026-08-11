@@ -202,6 +202,231 @@ Fjerner én abonnent. Uavhengig av hvilken liste abonnenten tilhører.
 
 ---
 
+### Målgrupper
+
+#### `GET /api/v1/malgrupper`
+
+Alle målgrupper på tvers av virksomheter.
+
+**Respons 200**
+```json
+[
+  {
+    "id": 3,
+    "navn": "Kommuner",
+    "type": "Dynamisk",
+    "scope": "Delt",
+    "antallMedlemmer": 356,
+    "opprettetAt": "2026-01-01T00:00:00Z",
+    "kriterier": {
+      "orgForm": "KOMM",
+      "naceKode": null,
+      "sektorKode": null,
+      "virksomhetsstatus": "aktive",
+      "aktivitetFilter": null,
+      "inkluderUnderenheter": false,
+      "ekskludertFraGruppe": []
+    }
+  },
+  {
+    "id": 1,
+    "navn": "Departementene",
+    "type": "Statisk",
+    "scope": "Delt",
+    "antallMedlemmer": 16,
+    "opprettetAt": "2026-01-01T00:00:00Z",
+    "kriterier": null
+  }
+]
+```
+
+---
+
+#### `GET /api/v1/malgrupper/{id}`
+
+**Path-parameter:** `id` (int)
+
+**Respons 200** — samme felt som i listen over.  
+**Respons 404** `application/problem+json`
+
+---
+
+#### `GET /api/v1/malgrupper/{id}/medlemmer`
+
+Paginert liste over medlemmer i én målgruppe.
+
+**Path-parameter:** `id` (int)  
+**Query-parametere:**
+
+| Parameter | Default | Maks | Beskrivelse |
+|-----------|---------|------|-------------|
+| `page` | 1 | — | Sidenummer (1-basert) |
+| `size` | 50 | 200 | Antall per side |
+
+**Respons 200**
+```json
+{
+  "items": [
+    {
+      "id": 12,
+      "organisasjonsnummer": "974760843",
+      "navn": "Riksrevisjonen",
+      "brregNavn": null,
+      "orgForm": "STAT",
+      "naceKode": "84.110",
+      "coAdresse": null
+    }
+  ],
+  "page": 1,
+  "size": 50,
+  "totalCount": 356
+}
+```
+
+`brregNavn` er Brreg-navn dersom `navn` er overstyrt via visningsnavn, ellers null.  
+**Respons 404** `application/problem+json`
+
+---
+
+#### `GET /api/v1/malgrupper/{id}/eksport.json`
+
+Laster ned gruppen som JSON-fil (`malgruppe-{id}.json`). Inneholder alle felter fra `BrregEnhetToRecipient`.
+
+**Respons 200** `application/json` (filnedlasting)  
+**Respons 404** `application/problem+json`
+
+---
+
+#### `GET /api/v1/malgrupper/{id}/eksport.csv`
+
+Laster ned gruppen som CSV-fil (`malgruppe-{id}.csv`), UTF-8.
+
+**Respons 200** `text/csv; charset=utf-8` (filnedlasting)  
+**Respons 404** `application/problem+json`
+
+---
+
+#### `POST /api/v1/malgrupper`
+
+Oppretter en ny målgruppe.
+
+**Request-body:**
+```json
+{
+  "type": "Statisk",
+  "navn": "Kommuner Rogaland",
+  "scope": "Delt",
+  "orgnr": ["964967725", "964338872"]
+}
+```
+
+Eller for dynamisk:
+```json
+{
+  "type": "Dynamisk",
+  "navn": "Kommuner (alle aktive)",
+  "scope": "Delt",
+  "kriterier": {
+    "orgForm": "KOMM",
+    "virksomhetsstatus": "aktive"
+  }
+}
+```
+
+**Felter:**
+
+| Felt | Påkrevd | Beskrivelse |
+|------|---------|-------------|
+| `type` | Ja | `"Statisk"` eller `"Dynamisk"` |
+| `navn` | Ja | Gruppenavn |
+| `scope` | Nei | `"Privat"` eller `"Delt"`. Default `"Delt"` |
+| `orgnr` | For Statisk | Liste med 9-sifrede orgnr |
+| `kriterier` | Nei | Filterregler — se `DynamicCriteriaDto` under. Alle felt valgfrie |
+
+**Merknad for Statisk:** orgnr valideres mot Brreg. Feil format (ikke 9 siffer) gir 400.
+Orgnr som ikke finnes i Brreg (`NotFound`) eller er slettet (`Deleted`) hoppes over uten feil — sjekk `antallMedlemmer` i responsen for å oppdage frafall.
+
+**Merknad for Dynamisk:** `SyncDynamicGroupAsync` kjøres synkront umiddelbart — kallet kan ta 10–30 s ved store resultatsett (f.eks. alle kommuner).
+
+**Respons 201** — Location-header peker på `/api/v1/malgrupper/{nyId}`. Body er samme form som `GET /api/v1/malgrupper/{id}`.  
+**Respons 400** `application/problem+json` med `errors`-felt.
+
+---
+
+#### `PATCH /api/v1/malgrupper/{id}`
+
+Endrer kun navnet på målgruppen. Berører ikke type, kriterier eller medlemmer.
+
+**Path-parameter:** `id` (int)  
+**Request-body:**
+```json
+{ "navn": "Nytt navn" }
+```
+
+**Respons 204** — ingen body.  
+**Respons 400** / **404** `application/problem+json`
+
+---
+
+#### `PUT /api/v1/malgrupper/{id}/kriterier`
+
+Erstatter filterreglene for en dynamisk målgruppe og resynkroniserer mot Brreg.
+Kun gyldig for målgrupper av type `Dynamisk`.
+
+**OBS:** Kallet er synkront og kan ta 10–30 sekunder — `SyncDynamicGroupAsync` henter alle
+matchende enheter side for side fra Brreg.
+
+**Path-parameter:** `id` (int)  
+**Request-body:** `DynamicCriteriaDto` — alle felt valgfrie:
+
+| Felt | Type | Default | Beskrivelse |
+|------|------|---------|-------------|
+| `orgForm` | string? | null | Brreg organisasjonsform-kode, f.eks. `"KOMM"`, `"AS"` |
+| `naceKode` | string? | null | NACE-prefix, f.eks. `"86"` (Helse) eller `"86.101"` (mer spesifikt) |
+| `sektorKode` | string? | null | Institusjonell sektorkode, f.eks. `"6100"` (Kommuneforvaltning) |
+| `virksomhetsstatus` | string? | `"aktive"` | `"aktive"` / `""` (alle) / `"avvikling"` / `"konkurs"` |
+| `aktivitetFilter` | string? | null | Fritekst-substring mot Brreg `aktivitet[]`-felt, f.eks. `"Skole"` |
+| `inkluderUnderenheter` | bool? | false | Hent også underenheter for alle treff |
+| `ekskludertFraGruppe` | string[]? | `[]` | Orgnr som alltid fjernes fra beregnet medlemsliste |
+
+**Ekskludering på to nivåer:**
+
+`ekskludertFraGruppe` i kriteriene ekskluderer en organisasjon fra å regnes som
+medlem av målgruppen overalt den brukes. Ekskluderingen er en del av regelsettet.
+
+Adresselistens `ekskluderte` (via `PUT /adresselister/{id}/ekskluderte`, ikke implementert ennå)
+er en per-utsendelse-override: den påvirker hvem som faktisk mottar én konkret utsendelse,
+uten å endre gruppemedlemskapet. En organisasjon kan stå i `ekskludertFraGruppe` og i
+adresselistens `ekskluderte` samtidig — de er additive, ikke konflikterende.
+
+**Respons 200**
+```json
+{ "antallMedlemmer": 356 }
+```
+
+**Respons 400** — gruppe er ikke av type Dynamisk  
+**Respons 404** — gruppe finnes ikke  
+Alle feil: `application/problem+json`
+
+---
+
+#### `DELETE /api/v1/malgrupper/{id}`
+
+Sletter en målgruppe permanent (cascade på `TargetGroupMember`-rader).
+
+Gir **409 Conflict** dersom målgruppen er koblet til én eller flere låste adresselister.
+Begrunnelse: snapshotet er immutabelt, men sletting av målgruppen ville gitt inkonsistente
+svar ved oppslag på den låste listens metadata.
+
+**Path-parameter:** `id` (int)
+
+**Respons 204** — ingen body.  
+**Respons 404** — gruppe finnes ikke.  
+**Respons 409** — koblet til låst adresseliste.  
+Alle feil: `application/problem+json`
+
+---
+
 ## Interne tjenester
 
 Brukes internt av Blazor-komponentene. Ikke eksponert over HTTP.
@@ -332,17 +557,20 @@ Abonnementsliste
 | `AbonnentKilde` | `Manuell`, `Api` |
 | `ValidationStatus` | `Ok`, `NotFound`, `Deleted`, `InvalidFormat` |
 
-### `DynamicCriteria`-felt
+### `DynamicCriteria`-felt (intern klasse)
 
-| Felt | Type | Standard | Beskrivelse |
-|------|------|---------|-------------|
-| `OrgForm` | `string?` | null | Brreg-kode, f.eks. `"KOMM"`, `"AS"` |
-| `NacePrefix` | `string?` | null | NACE-prefiksfilter, f.eks. `"86"` |
-| `SektorKode` | `string?` | null | Institusjonell sektorkode, f.eks. `"6100"` |
-| `Aktivitet` | `string` | `"aktive"` | `"aktive"`, `"konkurs"`, `"avvikling"` eller `""` (alle) |
-| `AktivitetFilter` | `string?` | null | Klientside-filter på aktivitet-feltet, f.eks. `"Barnehage"` |
-| `IncludeSubUnits` | `bool` | false | Hent også underenheter for alle treff |
-| `ExcludedOrgnrs` | `List<string>` | `[]` | Orgnr som alltid ekskluderes fra gruppen |
+API-kontrakten bruker `DynamicCriteriaDto` med norske feltnavn. Intern→API-mapping:
+
+| Intern felt | API-felt | Type | Standard | Beskrivelse |
+|-------------|----------|------|---------|-------------|
+| `OrgForm` | `orgForm` | `string?` | null | Brreg-kode, f.eks. `"KOMM"`, `"AS"` |
+| `NacePrefix` | `naceKode` | `string?` | null | NACE-prefiksfilter, f.eks. `"86"` |
+| ~~`Municipality`~~ | — | `string?` | null | **Dø-felt** — aldri brukt i `EvaluateDynamicCriteriaAsync`, utelatt fra API |
+| `SektorKode` | `sektorKode` | `string?` | null | Institusjonell sektorkode, f.eks. `"6100"` |
+| `Aktivitet` | `virksomhetsstatus` | `string` | `"aktive"` | `"aktive"`, `"konkurs"`, `"avvikling"` eller `""` (alle) |
+| `AktivitetFilter` | `aktivitetFilter` | `string?` | null | Klientside substring-filter mot `BrregEnhet.aktivitet[]`, f.eks. `"Barnehage"` |
+| `IncludeSubUnits` | `inkluderUnderenheter` | `bool` | false | Hent også underenheter for alle treff |
+| `ExcludedOrgnrs` | `ekskludertFraGruppe` | `List<string>` | `[]` | Orgnr som fjernes fra beregnet medlemsliste (målgruppenivå — ikke per-utsendelse) |
 
 ---
 
@@ -350,6 +578,7 @@ Abonnementsliste
 
 - Ingen autentisering — alle endepunkter er åpne
 - Ingen OpenAPI/Swagger-spesifikasjon
-- Ingen paginering på API-endepunktene (returnerer alltid full liste)
-- Ingen write-operasjoner for adresselister via API (kun les)
+- Adresseliste-endepunkter (`GET /adresselister`, `/mottakere`) returnerer full liste uten paginering
+- Ingen write-operasjoner for adresselister via API (`POST`, `PUT`, `DELETE`, lås, kopier, ekskluderte) — kun les
+- `PUT /malgrupper/{id}/kriterier` er synkront og kan ta 10–30 s for store Brreg-resultatsett
 - SQLite som database — ikke egnet for produksjon

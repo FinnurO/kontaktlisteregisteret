@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Kontaktlisteregisteret.Web.Data;
 using Kontaktlisteregisteret.Web.Services;
+using Kontaktlisteregisteret.Web.Api;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -189,6 +190,216 @@ api.MapDelete("/abonnenter/{id:int}", async (int id, AbonnementslisteService svc
 {
     var ok = await svc.SlettAbonnentAsync(id);
     return ok ? Results.NoContent() : Results.NotFound(new { error = "Abonnenten finnes ikke." });
+});
+
+// ── API v1: målgrupper ────────────────────────────────────────────────────────
+// Alle 4xx/5xx-svar bruker application/problem+json (RFC 9457).
+
+// GET /api/v1/malgrupper — alle målgrupper på tvers av virksomheter
+api.MapGet("/malgrupper", async (TargetGroupService svc) =>
+    Results.Ok((await svc.GetAllAsync()).Select(MålgruppeShape)));
+
+// GET /api/v1/malgrupper/{id}
+api.MapGet("/malgrupper/{id:int}", async (int id, TargetGroupService svc) =>
+{
+    var g = await svc.GetAsync(id);
+    return g is null
+        ? Results.Problem(title: "Målgruppe ikke funnet", statusCode: 404,
+            detail: $"Målgruppe {id} finnes ikke.",
+            type: "https://kontaktlisteregisteret.no/problems/ikke-funnet")
+        : Results.Ok(MålgruppeShape(g));
+});
+
+// GET /api/v1/malgrupper/{id}/medlemmer?page=1&size=50
+api.MapGet("/malgrupper/{id:int}/medlemmer", async (int id, int? page, int? size, TargetGroupService svc) =>
+{
+    var g = await svc.GetAsync(id);
+    if (g is null)
+        return Results.Problem(title: "Målgruppe ikke funnet", statusCode: 404,
+            detail: $"Målgruppe {id} finnes ikke.",
+            type: "https://kontaktlisteregisteret.no/problems/ikke-funnet");
+
+    var p = Math.Max(1, page ?? 1);
+    var s = Math.Clamp(size ?? 50, 1, 200);
+    var alle = g.Members.OrderBy(m => m.Recipient.Name).ToList();
+    var items = alle.Skip((p - 1) * s).Take(s).Select(m => new
+    {
+        id = m.Id,
+        organisasjonsnummer = m.Recipient.ExternalId,
+        navn = m.Visningsnavn ?? m.Recipient.Name,
+        brregNavn = m.Visningsnavn is not null ? m.Recipient.Name : null,
+        orgForm = m.Recipient.OrgForm,
+        naceKode = m.Recipient.NaceCode,
+        coAdresse = m.CoAdresse
+    });
+    return Results.Ok(new { items, page = p, size = s, totalCount = alle.Count });
+});
+
+// GET /api/v1/malgrupper/{id}/eksport.json — JSON-filnedlasting
+api.MapGet("/malgrupper/{id:int}/eksport.json", async (int id, TargetGroupService svc) =>
+{
+    try
+    {
+        var bytes = await svc.ExportJsonAsync(id);
+        return Results.File(bytes, "application/json", $"malgruppe-{id}.json");
+    }
+    catch (KeyNotFoundException)
+    {
+        return Results.Problem(title: "Målgruppe ikke funnet", statusCode: 404,
+            detail: $"Målgruppe {id} finnes ikke.",
+            type: "https://kontaktlisteregisteret.no/problems/ikke-funnet");
+    }
+});
+
+// GET /api/v1/malgrupper/{id}/eksport.csv — CSV-filnedlasting
+api.MapGet("/malgrupper/{id:int}/eksport.csv", async (int id, TargetGroupService svc) =>
+{
+    try
+    {
+        var bytes = await svc.ExportCsvAsync(id);
+        return Results.File(bytes, "text/csv; charset=utf-8", $"malgruppe-{id}.csv");
+    }
+    catch (KeyNotFoundException)
+    {
+        return Results.Problem(title: "Målgruppe ikke funnet", statusCode: 404,
+            detail: $"Målgruppe {id} finnes ikke.",
+            type: "https://kontaktlisteregisteret.no/problems/ikke-funnet");
+    }
+});
+
+// POST /api/v1/malgrupper — opprett statisk eller dynamisk målgruppe
+// For Statisk: validerer orgnr mot Brreg og legger til de som finnes (Ok).
+// For Dynamisk: kjører umiddelbart SyncDynamicGroupAsync — kan ta 10–30 s.
+api.MapPost("/malgrupper", async (OpprettMålgruppeRequest req, TargetGroupService svc, BrregService brreg) =>
+{
+    if (string.IsNullOrWhiteSpace(req.Navn))
+        return Results.ValidationProblem(
+            new Dictionary<string, string[]> { { "navn", ["Navn er påkrevd."] } },
+            type: "https://kontaktlisteregisteret.no/problems/validering");
+
+    var scope = ParseScope(req.Scope);
+    if (scope is null)
+        return Results.ValidationProblem(
+            new Dictionary<string, string[]> { { "scope", ["Ugyldig verdi. Gyldige verdier: \"Privat\", \"Delt\"."] } },
+            type: "https://kontaktlisteregisteret.no/problems/validering");
+
+    TargetGroup gruppe;
+
+    switch (req.Type)
+    {
+        case "Statisk":
+        {
+            if (req.Orgnr is null or { Count: 0 })
+                return Results.ValidationProblem(
+                    new Dictionary<string, string[]> { { "orgnr", ["Orgnr-liste er påkrevd for type Statisk."] } },
+                    type: "https://kontaktlisteregisteret.no/problems/validering");
+
+            var valideringer = await brreg.ValidateOrgnrListAsync(req.Orgnr);
+            var ugyldigFormat = valideringer.Where(v => v.Status == ValidationStatus.InvalidFormat).ToList();
+            if (ugyldigFormat.Count > 0)
+                return Results.ValidationProblem(
+                    new Dictionary<string, string[]>
+                    {
+                        { "orgnr", ugyldigFormat.Select(u => $"{u.Orgnr}: ugyldig format (ikke 9 siffer).").ToArray() }
+                    },
+                    type: "https://kontaktlisteregisteret.no/problems/validering");
+
+            // Orgnr med NotFound/Deleted inkluderes ikke, men gir heller ikke feil —
+            // lar kalleren sjekke antallMedlemmer i responsen for å oppdage frafall.
+            var recipients = valideringer
+                .Where(v => v.Status == ValidationStatus.Ok)
+                .Select(v => TargetGroupService.BrregEnhetToRecipient(v.Enhet!))
+                .ToList();
+
+            gruppe = await svc.CreateStaticAsync(req.Navn.Trim(), scope.Value, recipients);
+            break;
+        }
+        case "Dynamisk":
+        {
+            var criteria = (req.Kriterier
+                ?? new DynamicCriteriaDto(null, null, null, null, null, null, null))
+                .TilIntern();
+            gruppe = await svc.CreateDynamicAsync(req.Navn.Trim(), scope.Value, criteria);
+            break;
+        }
+        default:
+            return Results.ValidationProblem(
+                new Dictionary<string, string[]>
+                {
+                    { "type", ["Ugyldig verdi. Gyldige verdier: \"Statisk\", \"Dynamisk\"."] }
+                },
+                type: "https://kontaktlisteregisteret.no/problems/validering");
+    }
+
+    var nyGruppe = await svc.GetAsync(gruppe.Id);
+    return Results.Created($"/api/v1/malgrupper/{gruppe.Id}", MålgruppeShape(nyGruppe!));
+});
+
+// PATCH /api/v1/malgrupper/{id} — endre navn
+api.MapPatch("/malgrupper/{id:int}", async (int id, NavnEndreRequest req, TargetGroupService svc, AppDbContext db) =>
+{
+    if (!await db.TargetGroups.AnyAsync(g => g.Id == id))
+        return Results.Problem(title: "Målgruppe ikke funnet", statusCode: 404,
+            detail: $"Målgruppe {id} finnes ikke.",
+            type: "https://kontaktlisteregisteret.no/problems/ikke-funnet");
+
+    if (string.IsNullOrWhiteSpace(req.Navn))
+        return Results.ValidationProblem(
+            new Dictionary<string, string[]> { { "navn", ["Navn kan ikke være tomt."] } },
+            type: "https://kontaktlisteregisteret.no/problems/validering");
+
+    await svc.UpdateNameAsync(id, req.Navn);
+    return Results.NoContent();
+});
+
+// PUT /api/v1/malgrupper/{id}/kriterier — oppdater filterregler og resynkroniser mot Brreg
+// OBS: Kallet kan ta 10–30 s — SyncDynamicGroupAsync henter alle sider fra Brreg sekvensiell.
+api.MapPut("/malgrupper/{id:int}/kriterier", async (int id, DynamicCriteriaDto dto, TargetGroupService svc) =>
+{
+    var g = await svc.GetAsync(id);
+    if (g is null)
+        return Results.Problem(title: "Målgruppe ikke funnet", statusCode: 404,
+            detail: $"Målgruppe {id} finnes ikke.",
+            type: "https://kontaktlisteregisteret.no/problems/ikke-funnet");
+
+    if (g.Type != TargetGroupType.Dynamic)
+        return Results.Problem(title: "Målgruppen er ikke dynamisk", statusCode: 400,
+            detail: $"Målgruppe {id} er av type Statisk og har ingen kriterier å oppdatere.",
+            type: "https://kontaktlisteregisteret.no/problems/ikke-dynamisk");
+
+    g.DynamicCriteriaJson = System.Text.Json.JsonSerializer.Serialize(dto.TilIntern());
+    await svc.SaveCriteriaAsync(g);
+    await svc.SyncDynamicGroupAsync(g);
+
+    var oppdatert = await svc.GetAsync(id);
+    return Results.Ok(new { antallMedlemmer = oppdatert!.Members.Count });
+});
+
+// DELETE /api/v1/malgrupper/{id}
+// Blokkeres med 409 hvis målgruppen er koblet til en låst adresseliste —
+// snapshotet er immutabelt, men sletting ville gitt inkonsistente oppslag.
+api.MapDelete("/malgrupper/{id:int}", async (int id, AppDbContext db) =>
+{
+    var g = await db.TargetGroups.FindAsync(id);
+    if (g is null)
+        return Results.Problem(title: "Målgruppe ikke funnet", statusCode: 404,
+            detail: $"Målgruppe {id} finnes ikke.",
+            type: "https://kontaktlisteregisteret.no/problems/ikke-funnet");
+
+    var kobletTilLåst = await db.AdresselisteMålgrupper
+        .Where(m => m.MålgruppeId == id)
+        .Join(db.Adresselister, m => m.AdresselisteId, a => a.Id, (m, a) => a.Status)
+        .AnyAsync(s => s == AdresselisteStatus.Låst);
+
+    if (kobletTilLåst)
+        return Results.Problem(title: "Målgruppen er koblet til en låst adresseliste",
+            statusCode: 409,
+            detail: $"Målgruppe {id} kan ikke slettes — én eller flere låste adresselister refererer til den.",
+            type: "https://kontaktlisteregisteret.no/problems/referert-av-låst-liste");
+
+    db.TargetGroups.Remove(g);
+    await db.SaveChangesAsync();
+    return Results.NoContent();
 });
 
 // ── Admin API: virksomheter ──────────────────────────────────────────────────
@@ -560,6 +771,39 @@ static async Task SeedAsync(AppDbContext db)
     adresseliste.LåstAt = new DateTime(2026, 4, 22, 12, 0, 0, DateTimeKind.Utc);
     await db.SaveChangesAsync();
 }
+
+// ── Hjelpere for målgruppe-API ────────────────────────────────────────────────
+
+static object MålgruppeShape(TargetGroup g) => new
+{
+    id = g.Id,
+    navn = g.Name,
+    type = g.Type == TargetGroupType.Dynamic ? "Dynamisk" : "Statisk",
+    scope = g.Scope == TargetGroupScope.Shared ? "Delt" : "Privat",
+    antallMedlemmer = g.Members.Count,
+    opprettetAt = g.CreatedAt,
+    kriterier = g.DynamicCriteriaJson is null
+        ? null
+        : KriterierShape(System.Text.Json.JsonSerializer.Deserialize<DynamicCriteria>(g.DynamicCriteriaJson)!)
+};
+
+static object KriterierShape(DynamicCriteria c) => new
+{
+    orgForm = c.OrgForm,
+    naceKode = c.NacePrefix,
+    sektorKode = c.SektorKode,
+    virksomhetsstatus = c.Aktivitet,
+    aktivitetFilter = c.AktivitetFilter,
+    inkluderUnderenheter = c.IncludeSubUnits,
+    ekskludertFraGruppe = c.ExcludedOrgnrs
+};
+
+static TargetGroupScope? ParseScope(string? scope) => scope switch
+{
+    "Privat" => TargetGroupScope.Private,
+    "Delt" or null => TargetGroupScope.Shared,
+    _ => (TargetGroupScope?)null
+};
 
 record AbonnentRegistrerRequest(string Epost);
 record VirksomhetOnboardRequest(string Orgnr, string Navn, string? OnboardetAv = null);
