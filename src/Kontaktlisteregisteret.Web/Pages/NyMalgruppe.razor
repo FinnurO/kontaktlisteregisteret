@@ -531,19 +531,19 @@
                     </div>
                     @foreach (var r in navnResultater)
                     {
+                        var rOuter = r;
                         var harTreff = r.Enhet is not null && !r.Laster;
                         var erUsikkert = harTreff && !r.ErSikkertTreff;
-                        var harKandidater = erUsikkert && r.Kandidater.Count > 1;
                         var wrapStyle = (!harTreff ? "opacity:.5;" : "")
                             + (erUsikkert ? "border-left:3px solid #f59e0b;" : "border-left:3px solid transparent;");
-                        var rowBorderStyle = "gap:.5rem;align-items:center;" + (harKandidater ? "border-bottom:none;" : "");
+                        var rowBorderStyle = "gap:.5rem;align-items:center;" + (erUsikkert ? "border-bottom:none;" : "");
 
                         <div style="@wrapStyle">
                             <div class="card-row small" style="@rowBorderStyle">
                                 <input type="checkbox" checked="@r.Inkludert"
                                     disabled="@(!harTreff)"
                                     style="width:15px;height:15px;flex-shrink:0"
-                                    @onchange="() => r.Inkludert = !r.Inkludert" />
+                                    @onchange="() => rOuter.Inkludert = !rOuter.Inkludert" />
                                 <div style="flex:1;font-size:.88rem">@r.Søkenavn</div>
                                 @if (r.Laster)
                                 {
@@ -554,7 +554,7 @@
                                 else if (r.Enhet is not null)
                                 {
                                     <div style="flex:1.2;font-size:.88rem;display:flex;gap:4px;align-items:center">
-                                        @if (erUsikkert) { <span title="Usikkert treff — navn stemmer ikke. Velg riktig kandidat nedenfor." style="color:#f59e0b;font-size:1rem">⚠</span> }
+                                        @if (erUsikkert) { <span title="Usikkert treff — bekreft eller velg riktig kandidat nedenfor." style="color:#f59e0b;font-size:1rem">⚠</span> }
                                         <span>@r.Enhet.navn</span>
                                     </div>
                                     <div style="width:100px;font-family:monospace;font-size:.85rem">@r.Enhet.organisasjonsnummer</div>
@@ -567,37 +567,64 @@
                                     <div style="width:60px"></div>
                                 }
                             </div>
-                            @if (harKandidater)
+                            @if (erUsikkert)
                             {
-                                <div style="padding:4px 8px 8px 29px;background:rgba(251,191,36,.05);border-bottom:1px solid var(--border)">
-                                    <div style="font-size:.75rem;color:var(--text-muted);margin-bottom:4px">Mulige kandidater — velg riktig:</div>
-                                    @foreach (var k in r.Kandidater)
+                                <div style="padding:4px 8px 10px 29px;background:rgba(251,191,36,.05);border-bottom:1px solid var(--border)">
+                                    @if (r.Kandidater.Any())
                                     {
-                                        var erValgt = k.organisasjonsnummer == r.Enhet?.organisasjonsnummer;
-                                        var kLocal = k;
-                                        var rLocal = r;
-                                        <div style="display:flex;gap:.5rem;align-items:center;padding:2px 0;font-size:.82rem">
-                                            <span style="flex:1">
-                                                <text>@k.navn</text>
-                                                <span class="muted" style="font-size:.78rem">
-                                                    <text> (@k.organisasjonsnummer</text>
-                                                    @if (!string.IsNullOrEmpty(k.organisasjonsform?.kode)) { <text> · @k.organisasjonsform!.kode</text> }
-                                                    <text>)</text>
+                                        <div style="font-size:.75rem;color:var(--text-muted);margin-bottom:4px">Mulige kandidater fra søket:</div>
+                                        @foreach (var k in r.Kandidater)
+                                        {
+                                            var erValgt = k.organisasjonsnummer == rOuter.Enhet?.organisasjonsnummer;
+                                            var kLocal = k;
+                                            <div style="display:flex;gap:.5rem;align-items:center;padding:2px 0;font-size:.82rem">
+                                                <span style="flex:1">
+                                                    <text>@k.navn</text>
+                                                    <span class="muted" style="font-size:.78rem">
+                                                        <text> (@k.organisasjonsnummer</text>
+                                                        @if (!string.IsNullOrEmpty(k.organisasjonsform?.kode)) { <text> · @k.organisasjonsform!.kode</text> }
+                                                        <text>)</text>
+                                                    </span>
                                                 </span>
-                                            </span>
-                                            @if (erValgt)
+                                                @if (erValgt)
+                                                {
+                                                    <button class="btn btn-sm" style="font-size:.75rem;padding:1px 8px;background:var(--green-100,#dcfce7);color:var(--green-800,#166534);border-color:var(--green-300,#86efac)"
+                                                        @onclick="() => { rOuter.ErSikkertTreff = true; }">
+                                                        ✓ Bekreft
+                                                    </button>
+                                                }
+                                                else
+                                                {
+                                                    <button class="btn btn-sm" style="font-size:.75rem;padding:1px 8px"
+                                                        @onclick="() => { rOuter.Enhet = kLocal; rOuter.ErSikkertTreff = ErSikkertNavnTreff(rOuter.Søkenavn, kLocal.navn ?? string.Empty); rOuter.Inkludert = true; }">
+                                                        Velg
+                                                    </button>
+                                                }
+                                            </div>
+                                        }
+                                    }
+                                    else
+                                    {
+                                        <div style="font-size:.8rem;font-style:italic" class="muted">Ingen kandidater funnet fra navnesøket.</div>
+                                    }
+                                    @* Manuelt orgnr-oppslag *@
+                                    <div style="margin-top:8px;padding-top:6px;border-top:1px dashed var(--border,#e5e7eb)">
+                                        <div style="font-size:.75rem;color:var(--text-muted);margin-bottom:4px">Skriv inn riktig orgnr direkte:</div>
+                                        <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
+                                            <input class="form-input" style="width:130px;font-family:monospace;font-size:.88rem;padding:3px 6px"
+                                                placeholder="9 siffer"
+                                                @bind="rOuter.OrgnrInput" @bind:event="oninput" />
+                                            <button class="btn btn-sm"
+                                                @onclick="() => SlåOppOrgnrManueltAsync(rOuter)"
+                                                disabled="@(rOuter.OrgnrLaster || rOuter.OrgnrInput.Trim().Length != 9)">
+                                                @(rOuter.OrgnrLaster ? "Søker…" : "Slå opp")
+                                            </button>
+                                            @if (!string.IsNullOrEmpty(rOuter.OrgnrFeil))
                                             {
-                                                <span style="font-size:.75rem;padding:1px 6px;background:rgba(251,191,36,.2);border-radius:4px;color:#92400e">↑ valgt</span>
-                                            }
-                                            else
-                                            {
-                                                <button class="btn btn-sm" style="font-size:.75rem;padding:1px 8px"
-                                                    @onclick="() => { rLocal.Enhet = kLocal; rLocal.ErSikkertTreff = ErSikkertNavnTreff(rLocal.Søkenavn, kLocal.navn ?? string.Empty); rLocal.Inkludert = true; }">
-                                                    Velg
-                                                </button>
+                                                <span style="font-size:.8rem;color:var(--danger,#dc2626)">@rOuter.OrgnrFeil</span>
                                             }
                                         </div>
-                                    }
+                                    </div>
                                 </div>
                             }
                         </div>
@@ -700,6 +727,10 @@
         public bool ErSikkertTreff { get; set; }
         public bool Laster { get; set; } = true;
         public bool Inkludert { get; set; } = true;
+        // Manuelt orgnr-oppslag
+        public string OrgnrInput { get; set; } = "";
+        public bool OrgnrLaster { get; set; }
+        public string? OrgnrFeil { get; set; }
     }
     List<BrregEnhet> previewResults = [];
     List<OrgnrValidationResult> validationResults = [];
@@ -804,6 +835,28 @@
         }
 
         navnLoading = false;
+    }
+
+    async Task SlåOppOrgnrManueltAsync(NavnRad rad)
+    {
+        rad.OrgnrLaster = true;
+        rad.OrgnrFeil = null;
+        StateHasChanged();
+        var resultater = await Brreg.ValidateOrgnrListAsync([rad.OrgnrInput.Trim()]);
+        var treff = resultater.FirstOrDefault();
+        if (treff?.Status == ValidationStatus.Ok && treff.Enhet is not null)
+        {
+            rad.Enhet = treff.Enhet;
+            rad.ErSikkertTreff = true;
+            rad.Inkludert = true;
+            if (!rad.Kandidater.Any(k => k.organisasjonsnummer == treff.Enhet.organisasjonsnummer))
+                rad.Kandidater.Insert(0, treff.Enhet);
+        }
+        else
+        {
+            rad.OrgnrFeil = $"Fant ikke {rad.OrgnrInput.Trim()} i Brreg.";
+        }
+        rad.OrgnrLaster = false;
     }
 
     async Task SearchBrregAsync(int page = 0)
