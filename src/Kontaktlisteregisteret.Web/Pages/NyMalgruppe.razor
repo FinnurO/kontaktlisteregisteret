@@ -275,6 +275,15 @@
                                 <div class="row-name">@(r.Enhet?.navn ?? r.Orgnr)</div>
                                 <div class="row-sub">@r.Orgnr · @StatusLabel(r.Status)</div>
                             </div>
+                            @if (r.Status == ValidationStatus.Ok && visnavn.ContainsKey(r.Orgnr))
+                            {
+                                <input class="form-input" style="font-size:12px;width:160px;flex-shrink:0"
+                                       @bind="visnavn[r.Orgnr].Visningsnavn"
+                                       placeholder="@(r.Enhet?.navn ?? r.Orgnr)" />
+                                <input class="form-input" style="font-size:12px;width:120px;flex-shrink:0"
+                                       @bind="visnavn[r.Orgnr].CoAdresse"
+                                       placeholder="c/o..." />
+                            }
                         </div>
                     }
                 </div>
@@ -437,6 +446,19 @@
             else if (searchResults.Any())
             {
                 <div class="card" style="margin-top:4px">
+                    @{
+                        var alleValgt = searchResults.All(e => selectedOrgnrs.Contains(e.organisasjonsnummer));
+                    }
+                    <div style="display:flex;justify-content:flex-end;padding:4px 8px;border-bottom:1px solid var(--border)">
+                        @if (alleValgt)
+                        {
+                            <button class="btn btn-sm" @onclick="FravelgAlle">Fravelg alle (@searchResults.Count)</button>
+                        }
+                        else
+                        {
+                            <button class="btn btn-sm" @onclick="VelgAlle">Velg alle (@searchResults.Count)</button>
+                        }
+                    </div>
                     @foreach (var e in searchResults)
                     {
                         var isSelected = selectedOrgnrs.Contains(e.organisasjonsnummer);
@@ -528,6 +550,8 @@
                         <div style="flex:1.2">Brreg-navn</div>
                         <div style="width:100px;font-family:monospace">Orgnr</div>
                         <div style="width:60px">Form</div>
+                        <div style="width:150px">Visningsnavn</div>
+                        <div style="width:120px">c/o</div>
                     </div>
                     @foreach (var r in navnResultater)
                     {
@@ -565,6 +589,21 @@
                                     <div style="flex:1;font-size:.85rem;font-style:italic" class="muted">Ikke funnet</div>
                                     <div style="width:100px"></div>
                                     <div style="width:60px"></div>
+                                }
+                                @* B-30: Visningsnavn og c/o — vises kun for rader med treff *@
+                                @if (harTreff && visnavn.ContainsKey(r.Enhet!.organisasjonsnummer))
+                                {
+                                    <input class="form-input" style="font-size:12px;width:150px;flex-shrink:0"
+                                           @bind="visnavn[r.Enhet!.organisasjonsnummer].Visningsnavn"
+                                           placeholder="@(r.Enhet.navn ?? r.Enhet.organisasjonsnummer)" />
+                                    <input class="form-input" style="font-size:12px;width:120px;flex-shrink:0"
+                                           @bind="visnavn[r.Enhet!.organisasjonsnummer].CoAdresse"
+                                           placeholder="c/o..." />
+                                }
+                                else
+                                {
+                                    <div style="width:150px"></div>
+                                    <div style="width:120px"></div>
                                 }
                             </div>
                             @if (erUsikkert)
@@ -754,6 +793,14 @@
     List<BrregEnhet> searchResults = [];
     HashSet<string> selectedOrgnrs = [];
     Dictionary<string, BrregEnhet> selectedEnheter = [];
+
+    // B-30: Visningsnavn og c/o per orgnr (brukes i static-orgnr og static-navn)
+    class VisnavnData
+    {
+        public string Visningsnavn { get; set; } = "";
+        public string CoAdresse { get; set; } = "";
+    }
+    Dictionary<string, VisnavnData> visnavn = new();
     int searchPage = 0;
     int searchTotalPages = 1;
     int searchTotalElements = 0;
@@ -820,6 +867,10 @@
         validating = true;
         var lines = orgnrInput.Split(['\n', '\r', ';', ','], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         validationResults = await Brreg.ValidateOrgnrListAsync(lines);
+        // B-30: initialiser visningsnavn-dictionary fra valideringsresultater
+        visnavn.Clear();
+        foreach (var r in validationResults.Where(r => r.Status == ValidationStatus.Ok && r.Enhet is not null))
+            visnavn[r.Orgnr] = new() { Visningsnavn = r.Enhet!.navn ?? "", CoAdresse = "" };
         validating = false;
     }
 
@@ -836,6 +887,8 @@
         navnProgressIdx = 0;
         navnTotalt = linjer.Count;
         navnResultater = linjer.Select(l => new NavnRad(l)).ToList();
+        // B-30: nullstill visnavn-dictionary
+        visnavn.Clear();
 
         for (int i = 0; i < navnResultater.Count; i++)
         {
@@ -848,6 +901,9 @@
                 && ErSikkertNavnTreff(rad.Søkenavn, rad.Enhet.navn ?? string.Empty);
             rad.Laster = false;
             rad.Inkludert = rad.Enhet is not null;
+            // B-30: initialiser visningsnavn-data fortløpende
+            if (rad.Enhet is not null)
+                visnavn[rad.Enhet.organisasjonsnummer] = new() { Visningsnavn = rad.Enhet.navn ?? "", CoAdresse = "" };
             StateHasChanged();
         }
 
@@ -894,6 +950,25 @@
         searching = false;
     }
 
+    // B-25: velg/fravelg alle synlige søkeresultater
+    void VelgAlle()
+    {
+        foreach (var e in searchResults)
+        {
+            selectedEnheter[e.organisasjonsnummer] = e;
+            selectedOrgnrs.Add(e.organisasjonsnummer);
+        }
+    }
+
+    void FravelgAlle()
+    {
+        foreach (var e in searchResults)
+        {
+            selectedOrgnrs.Remove(e.organisasjonsnummer);
+            selectedEnheter.Remove(e.organisasjonsnummer);
+        }
+    }
+
     protected override async Task OnParametersSetAsync() =>
         await Ctx.LoadAsync(Orgnr);
 
@@ -910,16 +985,36 @@
             {
                 await Svc.CreateDynamicAsync(name, TargetGroupScope.Private, criteria, vid);
             }
+            else if (type == "static-orgnr")
+            {
+                // B-30: opprett gruppe uten mottakere, legg deretter til én for én med visningsnavn/c/o
+                var group = await Svc.CreateStaticAsync(name, TargetGroupScope.Private, [], vid);
+                foreach (var r in validationResults.Where(r => r.Status == ValidationStatus.Ok && r.Enhet is not null))
+                {
+                    var vd = visnavn.GetValueOrDefault(r.Orgnr);
+                    await Svc.AddMedVisningsnavnAsync(group.Id, r.Enhet!,
+                        string.IsNullOrWhiteSpace(vd?.Visningsnavn) ? null : vd!.Visningsnavn,
+                        string.IsNullOrWhiteSpace(vd?.CoAdresse) ? null : vd!.CoAdresse);
+                }
+            }
+            else if (type == "static-navn")
+            {
+                // B-30: opprett gruppe uten mottakere, legg deretter til én for én med visningsnavn/c/o
+                var group = await Svc.CreateStaticAsync(name, TargetGroupScope.Private, [], vid);
+                foreach (var r in navnResultater.Where(r => r.Enhet is not null && r.Inkludert))
+                {
+                    var orgnr = r.Enhet!.organisasjonsnummer;
+                    var vd = visnavn.GetValueOrDefault(orgnr);
+                    await Svc.AddMedVisningsnavnAsync(group.Id, r.Enhet!,
+                        string.IsNullOrWhiteSpace(vd?.Visningsnavn) ? null : vd!.Visningsnavn,
+                        string.IsNullOrWhiteSpace(vd?.CoAdresse) ? null : vd!.CoAdresse);
+                }
+            }
             else
             {
-                var recipients = type == "static-orgnr"
-                    ? validationResults.Where(r => r.Status == ValidationStatus.Ok && r.Enhet is not null)
-                        .Select(r => TargetGroupService.BrregEnhetToRecipient(r.Enhet!)).ToList()
-                    : type == "static-navn"
-                    ? navnResultater.Where(r => r.Enhet is not null && r.Inkludert)
-                        .Select(r => TargetGroupService.BrregEnhetToRecipient(r.Enhet!)).ToList()
-                    : selectedOrgnrs.Where(o => selectedEnheter.ContainsKey(o))
-                        .Select(o => TargetGroupService.BrregEnhetToRecipient(selectedEnheter[o])).ToList();
+                // static-search: ingen visningsnavn/c/o i denne flyten
+                var recipients = selectedOrgnrs.Where(o => selectedEnheter.ContainsKey(o))
+                    .Select(o => TargetGroupService.BrregEnhetToRecipient(selectedEnheter[o])).ToList();
                 await Svc.CreateStaticAsync(name, TargetGroupScope.Private, recipients, vid);
             }
             Nav.NavigateTo($"/{Orgnr}/malgrupper");

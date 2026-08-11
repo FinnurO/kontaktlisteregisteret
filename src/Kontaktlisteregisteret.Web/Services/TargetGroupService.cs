@@ -145,8 +145,8 @@ public class TargetGroupService(AppDbContext db, BrregService brreg)
         }
     }
 
-    /// Legger til et orgnr med eksplisitt visningsnavn — tillater samme Recipient å ligge to ganger
-    public async Task AddMedVisningsnavnAsync(int groupId, BrregEnhet e, string visningsnavn, string? coAdresse)
+    /// Legger til et orgnr med valgfritt visningsnavn og c/o — tillater samme Recipient å ligge to ganger
+    public async Task AddMedVisningsnavnAsync(int groupId, BrregEnhet e, string? visningsnavn, string? coAdresse)
     {
         var existing = await db.Recipients.FirstOrDefaultAsync(x => x.ExternalId == e.organisasjonsnummer);
         if (existing is null)
@@ -159,7 +159,7 @@ public class TargetGroupService(AppDbContext db, BrregService brreg)
         {
             TargetGroupId = groupId,
             RecipientId = existing.Id,
-            Visningsnavn = visningsnavn.Trim(),
+            Visningsnavn = string.IsNullOrWhiteSpace(visningsnavn) ? null : visningsnavn.Trim(),
             CoAdresse = string.IsNullOrWhiteSpace(coAdresse) ? null : coAdresse.Trim()
         });
         await db.SaveChangesAsync();
