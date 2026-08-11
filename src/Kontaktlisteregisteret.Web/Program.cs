@@ -34,15 +34,15 @@ using (var scope = app.Services.CreateScope())
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     try
     {
-        db.Database.EnsureCreated();
-        // Verifiser at nytt skjema (Virksomheter) er på plass
-        await db.Virksomheter.AnyAsync();
+        // Kjør ventende migrasjoner — oppretter databasen om den ikke finnes ennå
+        await db.Database.MigrateAsync();
     }
     catch
     {
-        // Skjemaet er utdatert (mangler nye kolonner/tabeller) — slett og gjenopprett
+        // Databasen ble opprettet med EnsureCreated og mangler migrasjonshistorikk —
+        // slett og opprett på nytt via migrasjoner
         db.Database.EnsureDeleted();
-        db.Database.EnsureCreated();
+        await db.Database.MigrateAsync();
     }
     if (!app.Configuration.GetValue<bool>("SkipSeed"))
         await SeedAsync(db);
