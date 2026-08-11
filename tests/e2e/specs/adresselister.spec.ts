@@ -28,8 +28,7 @@ test.describe('Adresselister', () => {
     // Opprett testmålgruppe med 2 kjente orgnr
     await page.goto(`${BASE}/malgrupper/ny`);
     const navnFelt = page.getByPlaceholder('Gi målgruppen et navn...');
-    await navnFelt.fill(`${TP} Adresseliste-MG`);
-    await navnFelt.dispatchEvent('change'); // utløser Blazors @bind (onchange)
+    await navnFelt.pressSequentially(`${TP} Adresseliste-MG`, { delay: 30 });
     await page.getByText('Statisk — orgnr-liste').click();
     const neste = page.getByRole('button', { name: 'Neste →' });
     await expect(neste).toBeEnabled({ timeout: 10_000 });
@@ -73,8 +72,7 @@ test.describe('Adresselister', () => {
     // Label har ingen for/id — matche på faktisk placeholder-tekst
     const tittelFelt = page.getByPlaceholder(/Høring av NOU/i);
     await expect(tittelFelt).toBeVisible({ timeout: 10_000 });
-    await tittelFelt.fill(LISTE_NAVN);
-    await tittelFelt.dispatchEvent('change'); // utløser Blazors @bind (onchange)
+    await tittelFelt.pressSequentially(LISTE_NAVN, { delay: 30 });
 
     await page.getByRole('button', { name: /Opprett|Lagre/i }).first().click();
 

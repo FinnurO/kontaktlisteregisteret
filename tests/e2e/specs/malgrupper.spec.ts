@@ -34,8 +34,9 @@ test('opprett statisk målgruppe via orgnr-liste og slett', async ({ page }) => 
   await goto(page, '/malgrupper/ny');
 
   const navnFelt = page.getByPlaceholder('Gi målgruppen et navn...');
-  await navnFelt.fill(navn);
-  await navnFelt.dispatchEvent('change'); // utløser Blazors @bind (onchange) — press('Tab') er ikke garantert i headless
+  // pressSequentially skriver tegn for tegn (30 ms/tegn) — gir Blazor-kretsen tid til å
+  // etablere SignalR underveis. fill() sender én input-event i <1 ms og taper mot race-condition.
+  await navnFelt.pressSequentially(navn, { delay: 30 });
 
   // Klikk på label-kortets tekst for å velge type
   await page.getByText('Statisk — orgnr-liste').click();
@@ -88,8 +89,7 @@ test('opprett dynamisk målgruppe med Brreg-filter og slett', async ({ page }) =
   await goto(page, '/malgrupper/ny');
 
   const navnFelt = page.getByPlaceholder('Gi målgruppen et navn...');
-  await navnFelt.fill(navn);
-  await navnFelt.dispatchEvent('change'); // utløser Blazors @bind (onchange)
+  await navnFelt.pressSequentially(navn, { delay: 30 });
 
   // "Dynamisk" er default — behøver ikke klikke på den
   const nesteKnapp = page.getByRole('button', { name: 'Neste →' });
@@ -140,8 +140,7 @@ test('opprett statisk målgruppe via navneoppslag og slett', async ({ page }) =>
   await goto(page, '/malgrupper/ny');
 
   const navnFelt = page.getByPlaceholder('Gi målgruppen et navn...');
-  await navnFelt.fill(navn);
-  await navnFelt.dispatchEvent('change'); // utløser Blazors @bind (onchange)
+  await navnFelt.pressSequentially(navn, { delay: 30 });
 
   await page.getByText('Statisk — navneliste').click();
 
@@ -191,8 +190,7 @@ test('rediger målgruppenavn inline', async ({ page }) => {
   // Opprett en minimal STATISK målgruppe (dynamisk uten kriterier henter ALLE enheter fra Brreg → timeout)
   await goto(page, '/malgrupper/ny');
   const navnFelt = page.getByPlaceholder('Gi målgruppen et navn...');
-  await navnFelt.fill(opprinnelig);
-  await navnFelt.dispatchEvent('change'); // utløser Blazors @bind (onchange)
+  await navnFelt.pressSequentially(opprinnelig, { delay: 30 });
   await page.getByText('Statisk — orgnr-liste').click();
   const nesteKnapp = page.getByRole('button', { name: 'Neste →' });
   await expect(nesteKnapp).toBeEnabled({ timeout: 10_000 });

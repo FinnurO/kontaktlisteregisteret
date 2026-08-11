@@ -23,10 +23,11 @@ export default async function globalSetup(_config: FullConfig) {
   try {
     await page.goto(WARMUP_URL, { waitUntil: 'load', timeout: 60_000 });
 
-    // Fyll inn navn for å trigge oninput → Blazor oppdaterer name-variabelen
+    // Skriv navn tegn for tegn — gir kretsen tid til å etablere SignalR-forbindelsen
+    // underveis. fill() sender én input-event i <1 ms og taper mot race-condition.
     const navnFelt = page.getByPlaceholder('Gi målgruppen et navn...');
     await expect(navnFelt).toBeVisible({ timeout: 30_000 });
-    await navnFelt.fill('warmup');
+    await navnFelt.pressSequentially('warmup', { delay: 30 });
 
     // Vent til Neste-knappen aktiveres — bekrefter at kretsen er oppe og oninput virker
     const nesteKnapp = page.locator('button.btn-primary', { hasText: 'Neste →' });
