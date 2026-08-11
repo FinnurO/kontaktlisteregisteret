@@ -212,9 +212,15 @@ test('rediger målgruppenavn inline', async ({ page }) => {
   await page.getByRole('button', { name: 'Opprett målgruppe' }).click();
   await expect(page).toHaveURL(new RegExp(`${BASE}/malgrupper$`), { timeout: 15_000 });
 
-  // Gå til detalj-siden
-  await page.getByText(opprinnelig).first().click();
+  // Gå til detalj-siden via click → fang URL → full reload (ny Blazor-circuit unngår circuit-krasjproblem
+  // fra opphopet EF Core change-tracker-state etter GetAllAsync i Malgrupper.razor)
+  await page.locator('.card-row', { hasText: opprinnelig }).first().click();
   await expect(page).toHaveURL(new RegExp(`${BASE}/malgrupper/\\d+`), { timeout: 10_000 });
+  const detaljUrl = page.url();
+  await page.goto(detaljUrl, { waitUntil: 'domcontentloaded' });
+
+  // Vent til MalgruppeDetalj har lastet (group != null → .detail-meta og knapper rendres)
+  await expect(page.locator('.detail-meta')).toBeVisible({ timeout: 20_000 });
 
   // Rediger navn via "✎ Navn"-knappen
   await page.getByRole('button', { name: /✎.*Navn|Navn/i }).click();

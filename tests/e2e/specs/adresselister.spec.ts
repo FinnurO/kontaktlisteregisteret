@@ -124,11 +124,13 @@ test.describe('Adresselister', () => {
     const mgVal = await mgOption.getAttribute('value');
     await mgSelect.selectOption(mgVal!);
 
-    // Bekreft koblingen — exact:true for å unngå strict-mode-konflikt med "+ Koble til abonnementsliste"
-    await page.getByRole('button', { name: 'Koble til', exact: true }).click();
+    // Vent til Blazor (@bind) har oppdatert valgtMålgruppeId på server — knappen aktiviseres
+    const koblingKnapp = page.getByRole('button', { name: 'Koble til', exact: true });
+    await expect(koblingKnapp).toBeEnabled({ timeout: 5_000 });
+    await koblingKnapp.click();
 
-    // Vent til MG vises i listen under seksjonen
-    await expect(page.getByText(`${TP} Adresseliste-MG`)).toBeVisible({ timeout: 10_000 });
+    // Vent til seksjonstiketten viser at én MG er koblet til
+    await expect(page.locator('.section-label', { hasText: 'Tilknyttede målgrupper (1)' })).toBeVisible({ timeout: 10_000 });
 
     // Steg 2: Sett status til Klar (knappetekst er eksakt "Marker som Klar")
     await page.getByRole('button', { name: 'Marker som Klar' }).click();

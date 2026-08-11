@@ -23,10 +23,10 @@ PoC med kjernefunksjonalitet for målgrupper, adresselister og abonnementslister
 
 | # | Funksjon | Beskrivelse |
 |---|---|---|
+| B-32 | **Brreg-oppslag ved onboarding** | Onboarding-skjemaet (`/admin/virksomheter`) skal slå opp navn fra Brreg når bruker taster inn orgnr. Feltet «Virksomhetsnavn» auto-fylles med offisielt Brreg-navn og gjøres skrivebeskyttet. Feil-tilstand hvis orgnr ikke finnes i Enhetsregisteret. Avslutt med synlig bekreftelse: orgnr + navn — som Digdir-onboarding av 991 825 827 / Digitaliseringsdirektoratet. |
 | B-19 | **Delte/nasjonale lister** | Noen lister (f.eks. dynamisk kommuneliste) bør eies sentralt og kunne konsumeres av alle virksomheter. Krever et eierskaps- og publiseringsregime: hvem godkjenner, hvem vedlikeholder, hvem kan kopiere. Avhenger av B-18. |
 | B-26 | **Hierarki av målgrupper (kompositt og AND-filter)** | To mekanismer ønskes: (a) En dynamisk målgruppe kan ha flere filterkritierier med AND-logikk — f.eks. næringskode=havner OG selskapsform=IKS. I dag er det ett filter per dimensjon. (b) En målgruppe kan inkludere andre målgrupper som «barn» — f.eks. «Havner» = «Havner KF» + «Havner IKS» + «Havner Andre». Dette gjør det mulig å bygge hierarkier av gjenbrukbare segmenter og kombinere dem i adresselister uten å duplisere data. |
 | B-29 | **Høringsinstanser uten orgnr** | Enkelte aktører (f.eks. IPR-er og uformelle råd) er ikke registrert i Brreg og mangler orgnr. Tre alternativer må vurderes og besluttes: (a) tillat mottakere kun med navn og e-postadresse (løsere struktur, krever ny `RecipientType`), (b) krev at alle mottakere er Brreg-enheter og heller legg inn e-postadresse som kontaktfelt per mottaker, eller (c) bruk c/o-felt på en eksisterende orgnr-holder («paraplyenhet») slik at orgnr alltid finnes. Valget påvirker datamodell, eksportformat og konsumentenes forventninger til entydige identifikatorer. |
-| B-30 | **c/o og alternativt navn ved opprett fra navne- og orgnr-liste** | Veiviseren for «Statisk — navneliste» og «Statisk — orgnr-liste» oppretter mottakere med Brreg-navn som visningsnavn og uten c/o. Legg til mulighet for å angi alternativt visningsnavn og c/o direkte i oppretts-flyten — f.eks. som en ekstra kolonne i resultattabellen som kan redigeres inline før man oppretter målgruppen. Relatert til c/o-støtte som allerede finnes i enkeltoppføringer. |
 | B-31 | **Profesjonelle brukergrupper (Brukerutvalg, Tillitsvalgte)** | Noen høringer sendes til faste råd og utvalg (f.eks. Brukerutvalget for et helseforetak, Tillitsvalgte i organisasjoner) der mottakerne er *enkeltpersoner i profesjonell rolle* — ikke virksomheter og ikke frivillige abonnenter. To alternativer må vurderes: (a) Registrering med f-nr slik at de kan motta varsel via Altinn og logge inn med Ansattporten — sikrer sterk identitet, men krever innhenting av f-nr og avhenger av B-02. (b) Vedlikehold med e-postadresser direkte i systemet — enklere å vedlikeholde, men løsere identitetskontroll og ingen Ansattporten-integrasjon. Valget påvirker datamodell (ny `PersonMottaker`-type eller utvidelse av eksisterende), invitasjonsflyt og GDPR-avklaringer rundt lagring av f-nr. Relatert til B-16 (støtte for personer) og B-29 (høringsinstanser uten orgnr). |
 
 ### 🟢 Lavere prioritet / idéer
@@ -41,7 +41,6 @@ PoC med kjernefunksjonalitet for målgrupper, adresselister og abonnementslister
 | B-16 | **Støtte for personer** | Fysiske personer (ikke bare organisasjoner) i målgrupper |
 | B-17 | **Internasjonal støtte** | Adapter-grensesnitt støtter allerede andre lands enhetsregistre — implementer f.eks. dansk CVR |
 | B-21 | **Frontend-redesign: Designsystemet.no + React** | Erstatt Blazor Server-frontend med React og Digdir sitt designsystem (Designsystemet.no). Minimal API-laget beholdes uendret. Forutsetter at API-kontrakten er stabil og godt testet. Gir bedre UX-konsistens med øvrige Digdir-produkter. |
-| B-27 | **Sortering alfabetisk** | Mangler alfabetisk sortering i oversiktslister for målgrupper, adresselister og abonnementslister. Bør kombineres med valg av sorteringsrekkefølge (nyeste / alfabetisk / antall mottakere). |
 | B-28 | **Brreg-hendelser og sist-oppdatert** | Abonnere på Brreg sitt [oppdateringer-endepunkt](https://data.brreg.no/enhetsregisteret/api/dokumentasjon/no/index.html#tag/oppdateringer) for å spore endringer på virksomheter i dynamiske og statiske lister. Innfør `sistOppdatert`-felt på listene og varsle redaktøren om endringer som kan påvirke listens innhold (f.eks. virksomhet slettet, skiftet navn, skiftet næringskode). |
 
 ---
@@ -51,7 +50,7 @@ PoC med kjernefunksjonalitet for målgrupper, adresselister og abonnementslister
 | # | Beskrivelse |
 |---|---|
 | T-01 | Ingen tester — trenger enhetstester for `AdresselisteService`, `BrregService`, dedup-logikk. Forutsetter at tjenestene først får interface-abstraksjoner (`IAdresselisteService` o.l.) for enkel mocking |
-| T-02 | `EnsureCreated` — databasen må slettes ved skjemaendringer; bytt til Migrations (se B-08) |
+| ~~T-02~~ | ~~`EnsureCreated` — løst av B-08 (Migrations innført)~~ |
 | T-03 | Ingen feilgrenser i UI — ukjente feil vises bare som tom side |
 | T-04 | BrregService cacher ikke — samme søk gjøres på nytt ved hver navigasjon |
 | T-05 | SQLitePCLRaw.lib.e_sqlite3 har kjent sårbarhet (transitiv avhengighet fra EF Core 10) |
