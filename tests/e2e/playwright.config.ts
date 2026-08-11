@@ -40,9 +40,6 @@ export default defineConfig({
     },
   ],
 
-  // Varm opp server og Blazor-krets én gang FØR tester kjøres
-  globalSetup: './global-setup.ts',
-
   // Start .NET-appen før tester; gjenbruk eksisterende server lokalt
   webServer: {
     command: 'dotnet run --project ../../src/Kontaktlisteregisteret.Web',
