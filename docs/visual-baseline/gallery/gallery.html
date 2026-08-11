@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+<meta charset="UTF-8">
+<title>Visual baseline — Kontaktlisteregisteret</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui, sans-serif; background: #f5f5f5; color: #1a1a1a; padding: 2rem; }
+  h1 { font-size: 1.4rem; font-weight: 600; margin-bottom: 0.25rem; }
+  .meta { font-size: 0.85rem; color: #666; margin-bottom: 2rem; }
+  .section-label {
+    font-size: 0.75rem; font-weight: 600; letter-spacing: 0.08em;
+    text-transform: uppercase; color: #888; margin: 2rem 0 0.75rem;
+    border-bottom: 1px solid #ddd; padding-bottom: 0.4rem;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+    gap: 1.25rem;
+    margin-bottom: 1rem;
+  }
+  .card {
+    background: #fff; border: 1px solid #e0e0e0; border-radius: 8px;
+    overflow: hidden; display: flex; flex-direction: column;
+  }
+  .card.warn { border-color: #f0a500; }
+  .card.missing { border-color: #d93025; background: #fef8f7; }
+  .img-wrap {
+    background: #fafafa; border-bottom: 1px solid #e0e0e0;
+    display: flex; align-items: center; justify-content: center;
+    padding: 1rem; min-height: 80px;
+  }
+  .img-wrap img { max-width: 100%; max-height: 260px; object-fit: contain; display: block; }
+  .caption { padding: 0.6rem 0.85rem; }
+  .caption .name { font-size: 0.82rem; font-weight: 600; font-family: monospace; color: #333; }
+  .caption .note { font-size: 0.78rem; color: #555; margin-top: 0.25rem; line-height: 1.4; }
+  .badge {
+    display: inline-block; font-size: 0.7rem; font-weight: 600;
+    padding: 0.15rem 0.5rem; border-radius: 3px; margin-top: 0.35rem;
+  }
+  .badge.ok   { background: #e6f4ea; color: #1e7e34; }
+  .badge.warn { background: #fef7e0; color: #b45309; }
+  .badge.miss { background: #fce8e6; color: #c5221f; }
+  .missing-placeholder {
+    width: 100%; min-height: 80px; display: flex; align-items: center;
+    justify-content: center; color: #c5221f; font-size: 0.85rem; padding: 1rem;
+    text-align: center; line-height: 1.5;
+  }
+</style>
+</head>
+<body>
+
+<h1>Visual baseline — Kontaktlisteregisteret</h1>
+<p class="meta">Generert fra Playwright <code>toHaveScreenshot</code>-baselines · 10 av 11 tilstander fanget · Platform: chromium / win32</p>
+
+<!-- ── Abonnentslister ──────────────────────────────────────────── -->
+<div class="section-label">Abonnentslister</div>
+<div class="grid">
+
+  <div class="card">
+    <div class="img-wrap"><img src="abonnementsliste-ny.png" alt="abonnementsliste-ny"></div>
+    <div class="caption">
+      <div class="name">abonnementsliste-ny.png</div>
+      <div class="note">Ny abonnementsliste uten abonnenter — side-header</div>
+      <span class="badge ok">OK</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="img-wrap"><img src="abonnementsliste-med-abonnent.png" alt="abonnementsliste-med-abonnent"></div>
+    <div class="caption">
+      <div class="name">abonnementsliste-med-abonnent.png</div>
+      <div class="note">Abonnent-rad med e-post, dato og Slett-knapp</div>
+      <span class="badge ok">OK</span>
+    </div>
+  </div>
+
+  <div class="card warn">
+    <div class="img-wrap"><img src="abonnement-ugyldig-epost.png" alt="abonnement-ugyldig-epost"></div>
+    <div class="caption">
+      <div class="name">abonnement-ugyldig-epost.png</div>
+      <div class="note">Skulle vise feilmelding for ugyldig e-post — fanger i stedet liste-metadata-kortet (Opprettet / Rediger / Slett liste). Feil lokator: <code>.card.first()</code> peker på listekortet, ikke skjemakortet.</div>
+      <span class="badge warn">⚠ Feil element</span>
+    </div>
+  </div>
+
+</div>
+
+<!-- ── Brreg-søk ────────────────────────────────────────────────── -->
+<div class="section-label">Brreg-søk</div>
+<div class="grid">
+
+  <div class="card">
+    <div class="img-wrap"><img src="brreg-soek-riksrevisjonen.png" alt="brreg-soek-riksrevisjonen"></div>
+    <div class="caption">
+      <div class="name">brreg-soek-riksrevisjonen.png</div>
+      <div class="note">Fritekst-søk «Riksrevisjonen» — 6 treff med orgnr, type og næringskode</div>
+      <span class="badge ok">OK</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="img-wrap"><img src="brreg-navneoppslag-treff.png" alt="brreg-navneoppslag-treff"></div>
+    <div class="caption">
+      <div class="name">brreg-navneoppslag-treff.png</div>
+      <div class="note">Navneoppslag-fane med tre treff (Riksrevisjonen, Skatteetaten, Statens vegvesen) — Brreg-navn og Form er maskert</div>
+      <span class="badge ok">OK</span>
+    </div>
+  </div>
+
+</div>
+
+<!-- ── Adresselister ─────────────────────────────────────────────── -->
+<div class="section-label">Adresselister</div>
+<div class="grid">
+
+  <div class="card">
+    <div class="img-wrap"><img src="adresseliste-utkast.png" alt="adresseliste-utkast"></div>
+    <div class="caption">
+      <div class="name">adresseliste-utkast.png</div>
+      <div class="note">Metadata-bar i Utkast-tilstand — dato/klokkeslett maskert. Element: <code>.detail-meta</code></div>
+      <span class="badge ok">OK</span>
+    </div>
+  </div>
+
+  <div class="card missing">
+    <div class="img-wrap">
+      <div class="missing-placeholder">Ikke generert — test 7 er betinget og skips når listen allerede er låst fra forrige kjøring</div>
+    </div>
+    <div class="caption">
+      <div class="name">adresseliste-låst.png</div>
+      <div class="note">Låst-tilstand med eksportknapper. Mangler fordi <code>adresselister.spec.ts</code> linje 131 bruker <code>if (await låsKnapp.isVisible(...))</code> — hele blokken hoppes over om listen allerede er låst. <code>afterAll</code> sletter ikke adresselisten, bare målgruppen.</div>
+      <span class="badge miss">✗ Mangler</span>
+    </div>
+  </div>
+
+</div>
+
+<!-- ── Målgrupper ────────────────────────────────────────────────── -->
+<div class="section-label">Målgrupper</div>
+<div class="grid">
+
+  <div class="card">
+    <div class="img-wrap"><img src="orgnr-validert.png" alt="orgnr-validert"></div>
+    <div class="caption">
+      <div class="name">orgnr-validert.png</div>
+      <div class="note">Orgnr-liste validert mot Brreg — 3 OK, alle gyldige (Riksrevisjonen, Skatteetaten, Statens vegvesen)</div>
+      <span class="badge ok">OK</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="img-wrap"><img src="dynamisk-filter.png" alt="dynamisk-filter"></div>
+    <div class="caption">
+      <div class="name">dynamisk-filter.png</div>
+      <div class="note">Dynamisk filter-UI — Organisasjonsform: KOMM–Kommune, Næringskode: Alle</div>
+      <span class="badge ok">OK</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="img-wrap"><img src="navneoppslag-treff.png" alt="navneoppslag-treff"></div>
+    <div class="caption">
+      <div class="name">navneoppslag-treff.png</div>
+      <div class="note">Navneoppslag i målgruppe-wizard — Riksrevisjonen og Skatteetaten, Form-kolonne maskert</div>
+      <span class="badge ok">OK</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="img-wrap"><img src="malgruppe-navn-oppdatert.png" alt="malgruppe-navn-oppdatert"></div>
+    <div class="caption">
+      <div class="name">malgruppe-navn-oppdatert.png</div>
+      <div class="note">Side-header etter inline navnebytting — «[E2E] Rename-Test Oppdatert» med JSON/CSV-knapper</div>
+      <span class="badge ok">OK</span>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>
