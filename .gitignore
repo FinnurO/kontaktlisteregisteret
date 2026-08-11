@@ -17,3 +17,11 @@ obj/
 ## OS
 .DS_Store
 Thumbs.db
+
+## Lokale verktøykonfigurasjoner
+.mcp.json
+
+## Playwright e2e
+tests/e2e/node_modules/
+tests/e2e/playwright-report/
+tests/e2e/test-results/

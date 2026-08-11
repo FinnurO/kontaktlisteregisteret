@@ -23,7 +23,7 @@
         <div class="wizard-body">
             <div class="form-group">
                 <label class="form-label">Navn</label>
-                <input class="form-input" @bind="name" placeholder="Gi målgruppen et navn..." />
+                <input class="form-input" @bind="name" @bind:event="oninput" placeholder="Gi målgruppen et navn..." />
             </div>
             <div class="form-group">
                 <label class="form-label">Type</label>
