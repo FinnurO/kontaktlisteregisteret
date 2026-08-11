@@ -3,17 +3,22 @@ using System.Text.Json.Serialization;
 
 namespace Kontaktlisteregisteret.Web.Services;
 
-public class BrregService(HttpClient http, ILogger<BrregService> logger) : IBrregService
+/// <summary>
+/// Implementasjon av <see cref="IBrregService"/> mot Tenor — Digdirs syntetiske testdata-API.
+/// Brukes når konfigurasjonsnøkkelen <c>Tenor:Enabled</c> er <c>true</c>.
+/// </summary>
+public class TenorBrregService(HttpClient http, ILogger<TenorBrregService> logger) : IBrregService
 {
-    private const string BaseUrl = "https://data.brreg.no/enhetsregisteret/api";
+    private const string BaseUrl = "https://tenor.test.brreg.no/enhetsregisteret/api";
 
     private static readonly JsonSerializerOptions JsonOpts = new()
     {
         PropertyNameCaseInsensitive = true
     };
 
-    // Last error message surfaced to the UI
     public string? LastError { get; private set; }
+    public int LastTotalElements { get; private set; }
+    public int LastTotalPages { get; private set; }
 
     private async Task<(T? Value, string? Error)> FetchAsync<T>(string url)
     {
@@ -24,7 +29,7 @@ public class BrregService(HttpClient http, ILogger<BrregService> logger) : IBrre
 
             if (!response.IsSuccessStatusCode)
             {
-                var msg = $"HTTP {(int)response.StatusCode} fra Brreg ({url}): {body[..Math.Min(300, body.Length)]}";
+                var msg = $"HTTP {(int)response.StatusCode} fra Tenor ({url}): {body[..Math.Min(300, body.Length)]}";
                 logger.LogWarning(msg);
                 return (default, msg);
             }
@@ -34,20 +39,17 @@ public class BrregService(HttpClient http, ILogger<BrregService> logger) : IBrre
         }
         catch (TaskCanceledException)
         {
-            var msg = $"Tidsavbrudd ved kall til Brreg ({url})";
+            var msg = $"Tidsavbrudd ved kall til Tenor ({url})";
             logger.LogWarning(msg);
             return (default, msg);
         }
         catch (Exception ex)
         {
-            var msg = $"Uventet feil mot Brreg: {ex.Message}";
-            logger.LogError(ex, "Brreg call failed: {Url}", url);
+            var msg = $"Uventet feil mot Tenor: {ex.Message}";
+            logger.LogError(ex, "Tenor call failed: {Url}", url);
             return (default, msg);
         }
     }
-
-    public int LastTotalElements { get; private set; }
-    public int LastTotalPages { get; private set; }
 
     public async Task<List<BrregEnhet>> SearchAsync(string query, string? orgform = null,
         string? nacePrefix = null, string? sektorKode = null, int size = 20, int page = 0)
@@ -74,10 +76,9 @@ public class BrregService(HttpClient http, ILogger<BrregService> logger) : IBrre
 
         do
         {
-            // Brreg returnerer HTTP 400 hvis size*(page+1) > 10 000
             if (size * (page + 1) > brregLimit)
             {
-                LastError = $"Brreg begrenser søk til {brregLimit:N0} treff. Returnerer de første {all.Count} enhetene.";
+                LastError = $"Tenor begrenser søk til {brregLimit:N0} treff. Returnerer de første {all.Count} enhetene.";
                 break;
             }
 
@@ -97,17 +98,14 @@ public class BrregService(HttpClient http, ILogger<BrregService> logger) : IBrre
         LastError = null;
         var clean = orgnr.Replace(" ", "");
 
-        // Prøv hovedenhet først
         var (enhet, enheterError) = await FetchAsync<BrregEnhet>($"{BaseUrl}/enheter/{clean}");
         if (enhet is not null) return enhet;
 
-        // Hvis ikke funnet som enhet, prøv underenhet (driftsenhet/avdeling)
         var (under, underError) = await FetchAsync<BrregEnhet>($"{BaseUrl}/underenheter/{clean}");
         if (under is not null) return under;
 
-        // Begge feilet — vis en brukervennlig melding uten interne URL-detaljer
-        LastError = "Fant ikke organisasjonen i Enhetsregisteret.";
-        logger.LogWarning("Orgnr {Orgnr} ikke funnet: enheter={E}, underenheter={U}", clean, enheterError, underError);
+        LastError = "Fant ikke organisasjonen i Tenor testregister.";
+        logger.LogWarning("Orgnr {Orgnr} ikke funnet i Tenor: enheter={E}, underenheter={U}", clean, enheterError, underError);
         return null;
     }
 
@@ -116,12 +114,10 @@ public class BrregService(HttpClient http, ILogger<BrregService> logger) : IBrre
         LastError = null;
         var all = new List<BrregEnhet>();
 
-        // Enheter (overordnet enhet er registrert som mor)
         var (enheterResult, _) = await FetchAsync<BrregSearchResult>(
             $"{BaseUrl}/enheter?overordnetEnhet={orgnr}&size=200");
         if (enheterResult?.Embedded?.enheter is { } e) all.AddRange(e);
 
-        // Underenheter (driftsenheter/avdelinger)
         var (underResult, error) = await FetchAsync<BrregUnderenhetResult>(
             $"{BaseUrl}/underenheter?overordnetEnhet={orgnr}&size=200");
         if (underResult?.Embedded?.underenheter is { } u) all.AddRange(u);
@@ -215,117 +211,3 @@ public class BrregService(HttpClient http, ILogger<BrregService> logger) : IBrre
         return string.Join("&", parts);
     }
 }
-
-// --- Result types ---
-
-public record OrgnrValidationResult(string Orgnr, BrregEnhet? Enhet, ValidationStatus Status);
-public enum ValidationStatus { Ok, NotFound, Deleted, InvalidFormat }
-
-public class DynamicCriteria
-{
-    public string? OrgForm { get; set; }
-    public string? NacePrefix { get; set; }
-    public string? Municipality { get; set; }
-    public string? SektorKode { get; set; }
-    // "aktive" | "konkurs" | "avvikling" | "" (alle)
-    public string Aktivitet { get; set; } = "aktive";
-    // Klient-side filter på aktivitet-feltet fra Brreg (f.eks. "Skole", "Barnehage")
-    public string? AktivitetFilter { get; set; }
-    public bool IncludeSubUnits { get; set; }
-    public List<string> ExcludedOrgnrs { get; set; } = [];
-}
-
-// --- Brreg DTOs ---
-
-public class BrregSearchResult
-{
-    [JsonPropertyName("_embedded")]
-    public BrregEmbedded? Embedded { get; set; }
-    public BrregPage? page { get; set; }
-}
-
-public class BrregEmbedded
-{
-    public List<BrregEnhet> enheter { get; set; } = [];
-}
-
-public class BrregUnderenhetResult
-{
-    [JsonPropertyName("_embedded")]
-    public BrregUnderenhetEmbedded? Embedded { get; set; }
-    public BrregPage? page { get; set; }
-}
-
-public class BrregUnderenhetEmbedded
-{
-    public List<BrregEnhet> underenheter { get; set; } = [];
-}
-
-public class BrregPage
-{
-    public int totalElements { get; set; }
-    public int totalPages { get; set; }
-}
-
-public class BrregEnhet
-{
-    public string organisasjonsnummer { get; set; } = "";
-    public string navn { get; set; } = "";
-    public BrregOrganisasjonsform? organisasjonsform { get; set; }
-    public List<string>? aktivitet { get; set; }
-    public BrregNaeringskode? naeringskode1 { get; set; }
-    public BrregNaeringskode? naeringskode2 { get; set; }
-    public BrregNaeringskode? naeringskode3 { get; set; }
-    public BrregSektorkode? institusjonellSektorkode { get; set; }
-    public BrregAdresse? postadresse { get; set; }
-    public BrregAdresse? forretningsadresse { get; set; }
-    public int? antallAnsatte { get; set; }
-    public string? stiftelsesdato { get; set; }
-    public string? registreringsdatoEnhetsregisteret { get; set; }
-    public string? slettedato { get; set; }
-    public bool? konkurs { get; set; }
-    public bool? underAvvikling { get; set; }
-    /// Orgnr for overordnet enhet (Brreg returnerer kun orgnr som streng, ikke et objekt)
-    public string? overordnetEnhet { get; set; }
-
-    public string AktivitetDisplay =>
-        aktivitet is { Count: > 0 } ? string.Join(", ", aktivitet) : "";
-
-    public string DisplayAddress =>
-        postadresse?.adresse is { Count: > 0 } a
-            ? $"{string.Join(", ", a)}, {postadresse.postnummer} {postadresse.poststed}"
-            : forretningsadresse?.adresse is { Count: > 0 } b
-                ? $"{string.Join(", ", b)}, {forretningsadresse.postnummer} {forretningsadresse.poststed}"
-                : "";
-
-    public bool ErAktiv => slettedato is null && konkurs != true && underAvvikling != true;
-}
-
-public class BrregOrganisasjonsform
-{
-    public string kode { get; set; } = "";
-    public string beskrivelse { get; set; } = "";
-}
-
-public class BrregNaeringskode
-{
-    public string kode { get; set; } = "";
-    public string beskrivelse { get; set; } = "";
-}
-
-public class BrregSektorkode
-{
-    public string kode { get; set; } = "";
-    public string beskrivelse { get; set; } = "";
-}
-
-public class BrregAdresse
-{
-    public List<string>? adresse { get; set; }
-    public string? postnummer { get; set; }
-    public string? poststed { get; set; }
-    public string? kommunenummer { get; set; }
-    public string? kommune { get; set; }
-    public string? landkode { get; set; }
-}
-

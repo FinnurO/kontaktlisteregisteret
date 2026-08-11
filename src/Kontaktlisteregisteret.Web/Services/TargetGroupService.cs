@@ -7,7 +7,7 @@ using Kontaktlisteregisteret.Web.Data;
 
 namespace Kontaktlisteregisteret.Web.Services;
 
-public class TargetGroupService(AppDbContext db, BrregService brreg)
+public class TargetGroupService(AppDbContext db, IBrregService brreg)
 {
     /// Henter alle målgrupper uavhengig av virksomhet — brukes av maskin-API.
     public async Task<List<TargetGroup>> GetAllAsync() =>

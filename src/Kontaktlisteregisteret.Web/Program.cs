@@ -12,12 +12,24 @@ builder.Services.AddDbContext<AppDbContext>(opt =>
     opt.UseSqlite(builder.Configuration.GetConnectionString("Default")
         ?? "Data Source=kontaktliste.db"));
 
-builder.Services.AddHttpClient<BrregService>(c =>
+if (builder.Configuration.GetValue<bool>("Tenor:Enabled"))
 {
-    c.BaseAddress = new Uri("https://data.brreg.no");
-    c.DefaultRequestHeaders.Add("Accept", "application/json");
-    c.Timeout = TimeSpan.FromSeconds(15);
-});
+    builder.Services.AddHttpClient<IBrregService, TenorBrregService>(c =>
+    {
+        c.BaseAddress = new Uri("https://tenor.test.brreg.no");
+        c.DefaultRequestHeaders.Add("Accept", "application/json");
+        c.Timeout = TimeSpan.FromSeconds(15);
+    });
+}
+else
+{
+    builder.Services.AddHttpClient<IBrregService, BrregService>(c =>
+    {
+        c.BaseAddress = new Uri("https://data.brreg.no");
+        c.DefaultRequestHeaders.Add("Accept", "application/json");
+        c.Timeout = TimeSpan.FromSeconds(15);
+    });
+}
 
 builder.Services.AddScoped<TargetGroupService>();
 builder.Services.AddScoped<AdresselisteService>();
@@ -270,7 +282,7 @@ api.MapGet("/malgrupper/{id:int}/eksport.csv", async (int id, TargetGroupService
 // POST /api/v1/malgrupper — opprett statisk eller dynamisk målgruppe
 // For Statisk: validerer orgnr mot Brreg og legger til de som finnes (Ok).
 // For Dynamisk: kjører umiddelbart SyncDynamicGroupAsync — kan ta 10–30 s.
-api.MapPost("/malgrupper", async (OpprettMålgruppeRequest req, TargetGroupService svc, BrregService brreg) =>
+api.MapPost("/malgrupper", async (OpprettMålgruppeRequest req, TargetGroupService svc, IBrregService brreg) =>
 {
     if (string.IsNullOrWhiteSpace(req.Navn))
         return Results.ValidationProblem(
