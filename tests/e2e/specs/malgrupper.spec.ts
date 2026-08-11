@@ -33,10 +33,11 @@ test('opprett statisk målgruppe via orgnr-liste og slett', async ({ page }) => 
   // ── Steg 1: Navn og type ─────────────────────────────────────────────────
   await goto(page, '/malgrupper/ny');
 
+  // Vent til #blazor-ready — emittert av OnAfterRender(firstRender) — bekrefter
+  // at SignalR-kretsen er etablert. Deretter er fill() deterministisk.
+  await page.waitForSelector('#blazor-ready', { state: 'attached', timeout: 15_000 });
   const navnFelt = page.getByPlaceholder('Gi målgruppen et navn...');
-  // pressSequentially skriver tegn for tegn (30 ms/tegn) — gir Blazor-kretsen tid til å
-  // etablere SignalR underveis. fill() sender én input-event i <1 ms og taper mot race-condition.
-  await navnFelt.pressSequentially(navn, { delay: 30 });
+  await navnFelt.fill(navn);
 
   // Klikk på label-kortets tekst for å velge type
   await page.getByText('Statisk — orgnr-liste').click();
@@ -87,9 +88,10 @@ test('opprett dynamisk målgruppe med Brreg-filter og slett', async ({ page }) =
   const navn = `${TP} Dynamisk-KOMM`;
 
   await goto(page, '/malgrupper/ny');
+  await page.waitForSelector('#blazor-ready', { state: 'attached', timeout: 15_000 });
 
   const navnFelt = page.getByPlaceholder('Gi målgruppen et navn...');
-  await navnFelt.pressSequentially(navn, { delay: 30 });
+  await navnFelt.fill(navn);
 
   // "Dynamisk" er default — behøver ikke klikke på den
   const nesteKnapp = page.getByRole('button', { name: 'Neste →' });
@@ -138,9 +140,10 @@ test('opprett statisk målgruppe via navneoppslag og slett', async ({ page }) =>
   const navn = `${TP} Navneliste`;
 
   await goto(page, '/malgrupper/ny');
+  await page.waitForSelector('#blazor-ready', { state: 'attached', timeout: 15_000 });
 
   const navnFelt = page.getByPlaceholder('Gi målgruppen et navn...');
-  await navnFelt.pressSequentially(navn, { delay: 30 });
+  await navnFelt.fill(navn);
 
   await page.getByText('Statisk — navneliste').click();
 
@@ -189,8 +192,9 @@ test('rediger målgruppenavn inline', async ({ page }) => {
 
   // Opprett en minimal STATISK målgruppe (dynamisk uten kriterier henter ALLE enheter fra Brreg → timeout)
   await goto(page, '/malgrupper/ny');
+  await page.waitForSelector('#blazor-ready', { state: 'attached', timeout: 15_000 });
   const navnFelt = page.getByPlaceholder('Gi målgruppen et navn...');
-  await navnFelt.pressSequentially(opprinnelig, { delay: 30 });
+  await navnFelt.fill(opprinnelig);
   await page.getByText('Statisk — orgnr-liste').click();
   const nesteKnapp = page.getByRole('button', { name: 'Neste →' });
   await expect(nesteKnapp).toBeEnabled({ timeout: 10_000 });

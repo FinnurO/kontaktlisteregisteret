@@ -27,8 +27,9 @@ test.describe('Adresselister', () => {
 
     // Opprett testmålgruppe med 2 kjente orgnr
     await page.goto(`${BASE}/malgrupper/ny`);
+    await page.waitForSelector('#blazor-ready', { state: 'attached', timeout: 15_000 });
     const navnFelt = page.getByPlaceholder('Gi målgruppen et navn...');
-    await navnFelt.pressSequentially(`${TP} Adresseliste-MG`, { delay: 30 });
+    await navnFelt.fill(`${TP} Adresseliste-MG`);
     await page.getByText('Statisk — orgnr-liste').click();
     const neste = page.getByRole('button', { name: 'Neste →' });
     await expect(neste).toBeEnabled({ timeout: 10_000 });
@@ -49,13 +50,24 @@ test.describe('Adresselister', () => {
 
   test.afterAll(async ({ browser }) => {
     const page = await browser.newPage();
+
+    // Slett testadresselisten (kun mulig i Utkast/Klar — Låst kan ikke slettes ennå, ref. B-01)
+    await page.goto(`${BASE}/adresselister`);
+    await page.waitForLoadState('domcontentloaded');
+    const listeRad = page.locator('.card-row', { hasText: LISTE_NAVN }).first();
+    const listeSlett = listeRad.getByRole('button', { name: 'Slett' });
+    if (await listeSlett.isVisible({ timeout: 2_000 }).catch(() => false)) {
+      await listeSlett.click();
+    }
+
     // Slett testmålgruppen
     await goto(page, '/malgrupper');
-    const rad = page.locator('.card-row', { hasText: `${TP} Adresseliste-MG` }).first();
-    const slett = rad.getByRole('button', { name: 'Slett' });
-    if (await slett.isVisible({ timeout: 2_000 }).catch(() => false)) {
-      await slett.click();
+    const mgRad = page.locator('.card-row', { hasText: `${TP} Adresseliste-MG` }).first();
+    const mgSlett = mgRad.getByRole('button', { name: 'Slett' });
+    if (await mgSlett.isVisible({ timeout: 2_000 }).catch(() => false)) {
+      await mgSlett.click();
     }
+
     await page.close();
   });
 
@@ -72,7 +84,7 @@ test.describe('Adresselister', () => {
     // Label har ingen for/id — matche på faktisk placeholder-tekst
     const tittelFelt = page.getByPlaceholder(/Høring av NOU/i);
     await expect(tittelFelt).toBeVisible({ timeout: 10_000 });
-    await tittelFelt.pressSequentially(LISTE_NAVN, { delay: 30 });
+    await tittelFelt.pressSequentially(LISTE_NAVN, { delay: 60 });
 
     await page.getByRole('button', { name: /Opprett|Lagre/i }).first().click();
 
@@ -93,64 +105,62 @@ test.describe('Adresselister', () => {
   });
 
   test('koble til målgruppe og sett status Klar', async ({ page }) => {
-    // Naviger til adresseliste-oversikt og finn testlisten
-    await page.goto(`${BASE}/adresselister`);
+    // Naviger direkte med listeId — unngår å plukke opp en gammel låst liste med samme navn
+    await page.goto(`${BASE}/adresselister/${listeId}`);
     await page.waitForLoadState('domcontentloaded');
 
-    await page.getByText(LISTE_NAVN).first().click();
-    await expect(page).toHaveURL(new RegExp(`${BASE}/adresselister/\\d+`), { timeout: 10_000 });
+    // Steg 1: Koble til målgruppe via select-element + bekreft
+    // Koblingsflyten: klikk toggle → select-dropdown vises → velg MG → klikk "Koble til"
+    const koblingToggle = page.getByRole('button', { name: '+ Koble til målgruppe' });
+    await expect(koblingToggle).toBeVisible({ timeout: 5_000 });
+    await koblingToggle.click();
 
-    // Koble til målgruppe (knapp på detalj-siden)
-    const leggTilMGKnapp = page.getByRole('button', { name: /Legg til målgruppe|Koble til/i });
-    if (await leggTilMGKnapp.isVisible({ timeout: 3_000 }).catch(() => false)) {
-      await leggTilMGKnapp.click();
-      // Velg testmålgruppe fra nedtrekk/søk
-      const mgAlternativ = page.getByText(`${TP} Adresseliste-MG`).first();
-      if (await mgAlternativ.isVisible({ timeout: 5_000 }).catch(() => false)) {
-        await mgAlternativ.click();
-      }
-    }
+    // Velg testmålgruppen i select-elementet.
+    // Option-teksten er "@g.Name (@g.Members.Count mottakere)" — exact-match på label virker ikke.
+    // Hent numeric value fra option-elementet som inneholder MG-navn og select med den.
+    const mgSelect = page.locator('select.form-input');
+    await expect(mgSelect).toBeVisible({ timeout: 3_000 });
+    const mgOption = mgSelect.locator('option').filter({ hasText: `${TP} Adresseliste-MG` }).first();
+    const mgVal = await mgOption.getAttribute('value');
+    await mgSelect.selectOption(mgVal!);
 
-    // Sett status til Klar
-    const klarKnapp = page.getByRole('button', { name: /Klar|Merk som klar/i });
-    if (await klarKnapp.isVisible({ timeout: 3_000 }).catch(() => false)) {
-      await klarKnapp.click();
-      await expect(page.locator('.tag-dynamic')).toBeVisible({ timeout: 5_000 });
-    }
+    // Bekreft koblingen — exact:true for å unngå strict-mode-konflikt med "+ Koble til abonnementsliste"
+    await page.getByRole('button', { name: 'Koble til', exact: true }).click();
+
+    // Vent til MG vises i listen under seksjonen
+    await expect(page.getByText(`${TP} Adresseliste-MG`)).toBeVisible({ timeout: 10_000 });
+
+    // Steg 2: Sett status til Klar (knappetekst er eksakt "Marker som Klar")
+    await page.getByRole('button', { name: 'Marker som Klar' }).click();
+    await expect(page.locator('.tag-dynamic')).toBeVisible({ timeout: 5_000 });
   });
 
   test('lås adresseliste og verifiser snapshot', async ({ page }) => {
-    await page.goto(`${BASE}/adresselister`);
+    // Naviger direkte med listeId — garanterer at vi treffer den ferskeste listen (Klar-tilstand)
+    await page.goto(`${BASE}/adresselister/${listeId}`);
     await page.waitForLoadState('domcontentloaded');
 
-    await page.getByText(LISTE_NAVN).first().click();
-    await expect(page).toHaveURL(new RegExp(`${BASE}/adresselister/\\d+`), { timeout: 10_000 });
-
-    // Finn og klikk Lås-knappen
+    // Lås-knappen skal alltid være synlig her — listen ble satt til Klar i forrige test
     const låsKnapp = page.getByRole('button', { name: /Lås|Ta snapshot/i });
-    if (await låsKnapp.isVisible({ timeout: 5_000 }).catch(() => false)) {
-      await låsKnapp.click();
+    await expect(låsKnapp).toBeVisible({ timeout: 5_000 });
+    await låsKnapp.click();
 
-      // Verifiser at status endres til "Låst"
-      await expect(page.locator('.tag-static')).toContainText('Låst', { timeout: 15_000 });
+    // Verifiser at status endres til "Låst"
+    await expect(page.locator('.tag-static')).toContainText('Låst', { timeout: 15_000 });
 
-      // Eksport-knappene dukker opp ved Låst-status
-      await expect(page.getByRole('button', { name: '↓ JSON' })).toBeVisible({ timeout: 5_000 });
-      await expect(page.getByRole('button', { name: '↓ CSV' })).toBeVisible({ timeout: 5_000 });
+    // Eksport-knappene dukker opp ved Låst-status
+    await expect(page.getByRole('button', { name: '↓ JSON' })).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByRole('button', { name: '↓ CSV' })).toBeVisible({ timeout: 5_000 });
 
-      // Visuell regresjonstest av Låst-tilstand
-      await expect(page.locator('.page-header')).toHaveScreenshot('adresseliste-låst.png', {
-        mask: [page.locator('.muted, time')],
-      });
-    }
+    // Visuell regresjonstest av Låst-tilstand
+    await expect(page.locator('.page-header')).toHaveScreenshot('adresseliste-låst.png', {
+      mask: [page.locator('.muted, time')],
+    });
   });
 
   test('eksporter låst adresseliste som JSON og CSV', async ({ page }) => {
-    await page.goto(`${BASE}/adresselister`);
+    await page.goto(`${BASE}/adresselister/${listeId}`);
     await page.waitForLoadState('domcontentloaded');
-
-    await page.getByText(LISTE_NAVN).first().click();
-    await expect(page).toHaveURL(new RegExp(`${BASE}/adresselister/\\d+`), { timeout: 10_000 });
 
     const jsonKnapp = page.getByRole('button', { name: '↓ JSON' });
     const csvKnapp = page.getByRole('button', { name: '↓ CSV' });

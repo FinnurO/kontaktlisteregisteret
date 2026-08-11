@@ -51,7 +51,7 @@
 <body>
 
 <h1>Visual baseline — Kontaktlisteregisteret</h1>
-<p class="meta">Generert fra Playwright <code>toHaveScreenshot</code>-baselines · 10 av 11 tilstander fanget · Platform: chromium / win32</p>
+<p class="meta">Generert fra Playwright <code>toHaveScreenshot</code>-baselines · 11 av 11 tilstander fanget · Platform: chromium / win32</p>
 
 <!-- ── Abonnentslister ──────────────────────────────────────────── -->
 <div class="section-label">Abonnentslister</div>
@@ -75,12 +75,12 @@
     </div>
   </div>
 
-  <div class="card warn">
+  <div class="card">
     <div class="img-wrap"><img src="abonnement-ugyldig-epost.png" alt="abonnement-ugyldig-epost"></div>
     <div class="caption">
       <div class="name">abonnement-ugyldig-epost.png</div>
-      <div class="note">Skulle vise feilmelding for ugyldig e-post — fanger i stedet liste-metadata-kortet (Opprettet / Rediger / Slett liste). Feil lokator: <code>.card.first()</code> peker på listekortet, ikke skjemakortet.</div>
-      <span class="badge warn">⚠ Feil element</span>
+      <div class="note">Skjemakort med ugyldig e-post og feilmelding «Ugyldig e-postadresse.» — fikset lokator: <code>.card.filter({ has: .form-error })</code></div>
+      <span class="badge ok">OK</span>
     </div>
   </div>
 
@@ -123,14 +123,12 @@
     </div>
   </div>
 
-  <div class="card missing">
-    <div class="img-wrap">
-      <div class="missing-placeholder">Ikke generert — test 7 er betinget og skips når listen allerede er låst fra forrige kjøring</div>
-    </div>
+  <div class="card">
+    <div class="img-wrap"><img src="adresseliste-låst.png" alt="adresseliste-låst"></div>
     <div class="caption">
       <div class="name">adresseliste-låst.png</div>
-      <div class="note">Låst-tilstand med eksportknapper. Mangler fordi <code>adresselister.spec.ts</code> linje 131 bruker <code>if (await låsKnapp.isVisible(...))</code> — hele blokken hoppes over om listen allerede er låst. <code>afterAll</code> sletter ikke adresselisten, bare målgruppen.</div>
-      <span class="badge miss">✗ Mangler</span>
+      <div class="note">Page-header i Låst-tilstand — «↓ JSON» og «↓ CSV» eksportknapper synlige. Element: <code>.page-header</code></div>
+      <span class="badge ok">OK</span>
     </div>
   </div>
 

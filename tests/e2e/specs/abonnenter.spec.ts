@@ -97,7 +97,9 @@ test.describe('Abonnementslister', () => {
     await expect(page.getByText(UGYLDIG_EPOST)).not.toBeVisible({ timeout: 3_000 });
 
     // Visuell regresjonstest av feil-tilstand
-    await expect(page.locator('.card').first()).toHaveScreenshot('abonnement-ugyldig-epost.png');
+    // .card.filter({ has: .form-error }) treffer kortet som *inneholder* feilmeldingen,
+    // ikke det første kortet på siden (som er liste-metakortet).
+    await expect(page.locator('.card').filter({ has: page.locator('.form-error') })).toHaveScreenshot('abonnement-ugyldig-epost.png');
 
     // Rydd opp
     await slettAbonnementsliste(page, LISTE_NAVN);

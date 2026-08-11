@@ -698,8 +698,25 @@
     </div>
 </div>
 
+@* Synlig for tester etter at Blazor-kretsen er etablert (OnAfterRender firstRender=true) *@
+@if (_circuitReady)
+{
+    <span id="blazor-ready" aria-hidden="true" style="display:none"></span>
+}
+
 @code {
     [Parameter] public string Orgnr { get; set; } = "";
+
+    bool _circuitReady;
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _circuitReady = true;
+            StateHasChanged();
+        }
+    }
 
     int step = 1;
     string name = "";
