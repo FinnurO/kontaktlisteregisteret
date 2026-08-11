@@ -50,6 +50,7 @@ builder.Services.AddScoped<AdresselisteService>();
 builder.Services.AddScoped<AbonnementslisteService>();
 builder.Services.AddScoped<VirksomhetService>();
 builder.Services.AddScoped<VirksomhetContext>();
+builder.Services.AddScoped<VarslingsService>();
 
 var app = builder.Build();
 

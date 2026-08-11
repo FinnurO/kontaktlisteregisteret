@@ -5,8 +5,9 @@ using Kontaktlisteregisteret.Web.Data;
 
 namespace Kontaktlisteregisteret.Web.Services;
 
-public class AdresselisteService(AppDbContext db)
+public class AdresselisteService(AppDbContext db, VarslingsService varslinger)
 {
+    private readonly VarslingsService _varslinger = varslinger;
     // ── Queries ─────────────────────────────────────────────────────────────
 
     /// Henter alle lister uavhengig av virksomhet — brukes av maskin-API.
@@ -245,6 +246,8 @@ public class AdresselisteService(AppDbContext db)
         liste.Status = AdresselisteStatus.Låst;
         liste.LåstAt = DateTime.UtcNow;
         await db.SaveChangesAsync();
+
+        await _varslinger.SendLåstVarslingAsync(liste.Tittel, liste.Mottakere.Count);
 
         return (true, null);
     }
