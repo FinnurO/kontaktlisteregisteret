@@ -8,9 +8,23 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddRazorPages();
 builder.Services.AddServerSideBlazor();
 
+// Bytt til PostgreSQL: sett Database:Provider=postgresql og ConnectionStrings:Postgresql i appsettings
+// For ny migrasjon mot PostgreSQL: dotnet ef migrations add <Namn> -- om nødvendig med --output-dir Migrations/Pg
+var dbProvider = builder.Configuration.GetValue<string>("Database:Provider") ?? "sqlite";
 builder.Services.AddDbContext<AppDbContext>(opt =>
-    opt.UseSqlite(builder.Configuration.GetConnectionString("Default")
-        ?? "Data Source=kontaktliste.db"));
+{
+    if (dbProvider.Equals("postgresql", StringComparison.OrdinalIgnoreCase))
+    {
+        var pgConn = builder.Configuration.GetConnectionString("Postgresql")
+            ?? "Host=localhost;Database=kontaktliste;Username=postgres;Password=postgres";
+        opt.UseNpgsql(pgConn);
+    }
+    else
+    {
+        opt.UseSqlite(builder.Configuration.GetConnectionString("Default")
+            ?? "Data Source=kontaktliste.db");
+    }
+});
 
 if (builder.Configuration.GetValue<bool>("Tenor:Enabled"))
 {
