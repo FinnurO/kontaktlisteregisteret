@@ -532,29 +532,73 @@
                     @foreach (var r in navnResultater)
                     {
                         var harTreff = r.Enhet is not null && !r.Laster;
-                        <div class="card-row small" style="@(!harTreff ? "opacity:.5" : "");gap:.5rem;align-items:center">
-                            <input type="checkbox" checked="@r.Inkludert"
-                                disabled="@(!harTreff)"
-                                style="width:15px;height:15px;flex-shrink:0"
-                                @onchange="() => r.Inkludert = !r.Inkludert" />
-                            <div style="flex:1;font-size:.88rem">@r.Søkenavn</div>
-                            @if (r.Laster)
+                        var erUsikkert = harTreff && !r.ErSikkertTreff;
+                        var harKandidater = erUsikkert && r.Kandidater.Count > 1;
+                        var wrapStyle = (!harTreff ? "opacity:.5;" : "")
+                            + (erUsikkert ? "border-left:3px solid #f59e0b;" : "border-left:3px solid transparent;");
+                        var rowBorderStyle = "gap:.5rem;align-items:center;" + (harKandidater ? "border-bottom:none;" : "");
+
+                        <div style="@wrapStyle">
+                            <div class="card-row small" style="@rowBorderStyle">
+                                <input type="checkbox" checked="@r.Inkludert"
+                                    disabled="@(!harTreff)"
+                                    style="width:15px;height:15px;flex-shrink:0"
+                                    @onchange="() => r.Inkludert = !r.Inkludert" />
+                                <div style="flex:1;font-size:.88rem">@r.Søkenavn</div>
+                                @if (r.Laster)
+                                {
+                                    <div style="flex:1;font-size:.85rem" class="muted">Søker…</div>
+                                    <div style="width:100px"></div>
+                                    <div style="width:60px"></div>
+                                }
+                                else if (r.Enhet is not null)
+                                {
+                                    <div style="flex:1.2;font-size:.88rem;display:flex;gap:4px;align-items:center">
+                                        @if (erUsikkert) { <span title="Usikkert treff — navn stemmer ikke. Velg riktig kandidat nedenfor." style="color:#f59e0b;font-size:1rem">⚠</span> }
+                                        <span>@r.Enhet.navn</span>
+                                    </div>
+                                    <div style="width:100px;font-family:monospace;font-size:.85rem">@r.Enhet.organisasjonsnummer</div>
+                                    <div style="width:60px;font-size:.8rem" class="muted">@r.Enhet.organisasjonsform?.kode</div>
+                                }
+                                else
+                                {
+                                    <div style="flex:1;font-size:.85rem;font-style:italic" class="muted">Ikke funnet</div>
+                                    <div style="width:100px"></div>
+                                    <div style="width:60px"></div>
+                                }
+                            </div>
+                            @if (harKandidater)
                             {
-                                <div style="flex:1;font-size:.85rem" class="muted">Søker…</div>
-                                <div style="width:100px"></div>
-                                <div style="width:60px"></div>
-                            }
-                            else if (r.Enhet is not null)
-                            {
-                                <div style="flex:1.2;font-size:.88rem">@r.Enhet.navn</div>
-                                <div style="width:100px;font-family:monospace;font-size:.85rem">@r.Enhet.organisasjonsnummer</div>
-                                <div style="width:60px;font-size:.8rem" class="muted">@r.Enhet.organisasjonsform?.kode</div>
-                            }
-                            else
-                            {
-                                <div style="flex:1;font-size:.85rem;font-style:italic" class="muted">Ikke funnet</div>
-                                <div style="width:100px"></div>
-                                <div style="width:60px"></div>
+                                <div style="padding:4px 8px 8px 29px;background:rgba(251,191,36,.05);border-bottom:1px solid var(--border)">
+                                    <div style="font-size:.75rem;color:var(--text-muted);margin-bottom:4px">Mulige kandidater — velg riktig:</div>
+                                    @foreach (var k in r.Kandidater)
+                                    {
+                                        var erValgt = k.organisasjonsnummer == r.Enhet?.organisasjonsnummer;
+                                        var kLocal = k;
+                                        var rLocal = r;
+                                        <div style="display:flex;gap:.5rem;align-items:center;padding:2px 0;font-size:.82rem">
+                                            <span style="flex:1">
+                                                <text>@k.navn</text>
+                                                <span class="muted" style="font-size:.78rem">
+                                                    <text> (@k.organisasjonsnummer</text>
+                                                    @if (!string.IsNullOrEmpty(k.organisasjonsform?.kode)) { <text> · @k.organisasjonsform!.kode</text> }
+                                                    <text>)</text>
+                                                </span>
+                                            </span>
+                                            @if (erValgt)
+                                            {
+                                                <span style="font-size:.75rem;padding:1px 6px;background:rgba(251,191,36,.2);border-radius:4px;color:#92400e">↑ valgt</span>
+                                            }
+                                            else
+                                            {
+                                                <button class="btn btn-sm" style="font-size:.75rem;padding:1px 8px"
+                                                    @onclick="() => { rLocal.Enhet = kLocal; rLocal.ErSikkertTreff = ErSikkertNavnTreff(rLocal.Søkenavn, kLocal.navn ?? string.Empty); rLocal.Inkludert = true; }">
+                                                    Velg
+                                                </button>
+                                            }
+                                        </div>
+                                    }
+                                </div>
                             }
                         </div>
                     }
@@ -652,6 +696,8 @@
     {
         public string Søkenavn { get; } = søkenavn;
         public BrregEnhet? Enhet { get; set; }
+        public List<BrregEnhet> Kandidater { get; set; } = [];
+        public bool ErSikkertTreff { get; set; }
         public bool Laster { get; set; } = true;
         public bool Inkludert { get; set; } = true;
     }
@@ -671,6 +717,17 @@
     void VelgStatiskOrgnr() { type = "static-orgnr"; }
     void VelgStatiskSok()   { type = "static-search"; }
     void VelgStatiskNavn()  { type = "static-navn"; }
+
+    static bool ErSikkertNavnTreff(string søkenavn, string brregNavn)
+    {
+        static string Norm(string s) =>
+            s.ToLowerInvariant()
+             .Replace(".", "").Replace(",", "").Replace("-", " ")
+             .Replace("  ", " ").Trim();
+        var a = Norm(søkenavn);
+        var b = Norm(brregNavn);
+        return a == b || b.Contains(a) || a.Contains(b);
+    }
 
     void OnNaceSelected()
     {
@@ -736,8 +793,11 @@
         {
             navnProgressIdx = i + 1;
             var rad = navnResultater[i];
-            var treff = await Brreg.SearchAsync(rad.Søkenavn, size: 1);
+            var treff = await Brreg.SearchAsync(rad.Søkenavn, size: 5);
+            rad.Kandidater = treff;
             rad.Enhet = treff.FirstOrDefault();
+            rad.ErSikkertTreff = rad.Enhet is not null
+                && ErSikkertNavnTreff(rad.Søkenavn, rad.Enhet.navn ?? string.Empty);
             rad.Laster = false;
             rad.Inkludert = rad.Enhet is not null;
             StateHasChanged();
