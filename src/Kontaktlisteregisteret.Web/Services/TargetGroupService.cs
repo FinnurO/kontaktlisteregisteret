@@ -7,7 +7,7 @@ using Kontaktlisteregisteret.Web.Data;
 
 namespace Kontaktlisteregisteret.Web.Services;
 
-public class TargetGroupService(AppDbContext db, IBrregService brreg)
+public class TargetGroupService(AppDbContext db, IBrregService brreg, AuditLogService auditLog)
 {
     /// Henter alle målgrupper uavhengig av virksomhet — brukes av maskin-API.
     public async Task<List<TargetGroup>> GetAllAsync() =>
@@ -43,6 +43,7 @@ public class TargetGroupService(AppDbContext db, IBrregService brreg)
         db.TargetGroups.Add(group);
         await db.SaveChangesAsync();
         await SyncDynamicGroupAsync(group);
+        await auditLog.LogAsync("Opprettet", "Målgruppe", group.Id, group.Name, virksomhetId: group.VirksomhetId);
         return group;
     }
 
@@ -59,6 +60,7 @@ public class TargetGroupService(AppDbContext db, IBrregService brreg)
         db.TargetGroups.Add(group);
         await db.SaveChangesAsync();
         await AddRecipientsAsync(group.Id, recipients);
+        await auditLog.LogAsync("Opprettet", "Målgruppe", group.Id, group.Name, virksomhetId: group.VirksomhetId);
         return group;
     }
 
@@ -88,6 +90,7 @@ public class TargetGroupService(AppDbContext db, IBrregService brreg)
                 });
             await db.SaveChangesAsync();
         }
+        await auditLog.LogAsync("Kopiert", "Målgruppe", kopi.Id, kopi.Name, virksomhetId: kopi.VirksomhetId);
         return kopi;
     }
 
@@ -104,8 +107,11 @@ public class TargetGroupService(AppDbContext db, IBrregService brreg)
         var group = await db.TargetGroups.FindAsync(id);
         if (group is not null)
         {
+            var name = group.Name;
+            var virksomhetId = group.VirksomhetId;
             db.TargetGroups.Remove(group);
             await db.SaveChangesAsync();
+            await auditLog.LogAsync("Slettet", "Målgruppe", id, name, virksomhetId: virksomhetId);
         }
     }
 

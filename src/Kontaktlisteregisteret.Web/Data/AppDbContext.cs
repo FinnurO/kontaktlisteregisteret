@@ -14,6 +14,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Abonnementsliste> Abonnementslister => Set<Abonnementsliste>();
     public DbSet<Abonnent> Abonnenter => Set<Abonnent>();
     public DbSet<AdresselisteAbonnementsliste> AdresselisteAbonnementslister => Set<AdresselisteAbonnementsliste>();
+    public DbSet<AuditLog> AuditLogg => Set<AuditLog>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -34,6 +35,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         b.Entity<Abonnent>()
             .HasIndex(x => new { x.AbonnementslisteId, x.Epost }).IsUnique();
         b.Entity<Abonnementsliste>().HasIndex(x => x.VirksomhetId);
+        b.Entity<AuditLog>().HasIndex(x => x.Tidspunkt);
+        b.Entity<AuditLog>().HasIndex(x => x.VirksomhetId);
     }
 }
 
@@ -182,4 +185,21 @@ public class AdresselisteMottaker
     public string? Visningsnavn { get; set; }
     /// Fryst fra TargetGroupMember.CoAdresse ved låsing
     public string? CoAdresse { get; set; }
+}
+
+// ── AuditLog ─────────────────────────────────────────────────────────────────
+
+public class AuditLog
+{
+    public int Id { get; set; }
+    public DateTime Tidspunkt { get; set; } = DateTime.UtcNow;
+    /// "Opprettet", "Låst", "Eksportert", "Slettet", "Kopiert", "Navnebyttet"
+    public string Handling { get; set; } = "";
+    /// "Adresseliste", "Målgruppe", "Abonnementsliste"
+    public string EnhetsType { get; set; } = "";
+    public int? EnhetsId { get; set; }
+    public string? EnhetsNavn { get; set; }
+    public int? VirksomhetId { get; set; }
+    /// Uten autentisering: null eller "System"
+    public string? UtførtAv { get; set; }
 }

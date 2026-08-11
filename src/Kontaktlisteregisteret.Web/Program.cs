@@ -52,6 +52,7 @@ builder.Services.AddHttpClient<SsbKlassService>(c =>
     c.Timeout = TimeSpan.FromSeconds(10);
 });
 
+builder.Services.AddScoped<AuditLogService>();
 builder.Services.AddScoped<TargetGroupService>();
 builder.Services.AddScoped<AdresselisteService>();
 builder.Services.AddScoped<AbonnementslisteService>();

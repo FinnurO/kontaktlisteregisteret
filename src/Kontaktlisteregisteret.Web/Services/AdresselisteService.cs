@@ -5,7 +5,7 @@ using Kontaktlisteregisteret.Web.Data;
 
 namespace Kontaktlisteregisteret.Web.Services;
 
-public class AdresselisteService(AppDbContext db, VarslingsService varslinger)
+public class AdresselisteService(AppDbContext db, VarslingsService varslinger, AuditLogService auditLog)
 {
     private readonly VarslingsService _varslinger = varslinger;
     // ── Queries ─────────────────────────────────────────────────────────────
@@ -58,6 +58,7 @@ public class AdresselisteService(AppDbContext db, VarslingsService varslinger)
         };
         db.Adresselister.Add(liste);
         await db.SaveChangesAsync();
+        await auditLog.LogAsync("Opprettet", "Adresseliste", liste.Id, liste.Tittel, virksomhetId: liste.VirksomhetId);
         return liste;
     }
 
@@ -248,6 +249,7 @@ public class AdresselisteService(AppDbContext db, VarslingsService varslinger)
         await db.SaveChangesAsync();
 
         await _varslinger.SendLåstVarslingAsync(liste.Tittel, liste.Mottakere.Count);
+        await auditLog.LogAsync("Låst", "Adresseliste", liste.Id, liste.Tittel, virksomhetId: liste.VirksomhetId);
 
         return (true, null);
     }
