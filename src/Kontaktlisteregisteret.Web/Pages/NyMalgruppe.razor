@@ -43,6 +43,11 @@
                         <div class="type-title">Statisk — søk og velg</div>
                         <div class="type-desc">Søk i Brreg og velg enkeltvis</div>
                     </label>
+                    <label class="type-option @(type == "static-navn" ? "selected" : "")">
+                        <input type="radio" name="grpType" checked="@(type == "static-navn")" @onchange="VelgStatiskNavn" style="display:none" />
+                        <div class="type-title">Statisk — navneliste</div>
+                        <div class="type-desc">Lim inn virksomhetsnavn, slår opp orgnr fra Brreg</div>
+                    </label>
                 </div>
             </div>
         </div>
@@ -485,6 +490,78 @@
             }
         </div>
     }
+    else if (step == 2 && type == "static-navn")
+    {
+        <div class="wizard-body">
+            <div class="form-group">
+                <label class="form-label">Lim inn virksomhetsnavn — ett per linje</label>
+                <textarea class="form-input" rows="8"
+                    style="font-family:monospace;font-size:.88rem;resize:vertical"
+                    @bind="navnInput" @bind:event="oninput"
+                    placeholder="Digitaliseringsdirektoratet&#10;Riksrevisjonen&#10;Skatteetaten"></textarea>
+            </div>
+
+            <div style="display:flex;gap:.75rem;align-items:center;margin-bottom:.75rem;flex-wrap:wrap">
+                <button class="btn btn-primary" @onclick="SlåOppNavnAsync"
+                    disabled="@(navnLoading || string.IsNullOrWhiteSpace(navnInput))">
+                    @(navnLoading ? "Slår opp…" : "Slå opp i Brreg")
+                </button>
+                @if (navnResultater.Any())
+                {
+                    <span class="muted" style="font-size:.85rem">
+                        @navnResultater.Count(r => r.Enhet is not null && r.Inkludert) av @navnResultater.Count inkludert
+                    </span>
+                }
+                @if (navnLoading)
+                {
+                    <span class="muted" style="font-size:.85rem">Slår opp @navnProgressIdx av @navnTotalt…</span>
+                }
+            </div>
+
+            @if (navnResultater.Any())
+            {
+                <div class="card">
+                    @* Header *@
+                    <div class="card-row small" style="font-weight:600;font-size:.78rem;color:var(--text-muted);background:var(--gray-50);cursor:default;gap:.5rem">
+                        <div style="width:16px"></div>
+                        <div style="flex:1">Søkenavn</div>
+                        <div style="flex:1.2">Brreg-navn</div>
+                        <div style="width:100px;font-family:monospace">Orgnr</div>
+                        <div style="width:60px">Form</div>
+                    </div>
+                    @foreach (var r in navnResultater)
+                    {
+                        var harTreff = r.Enhet is not null && !r.Laster;
+                        <div class="card-row small" style="@(!harTreff ? "opacity:.5" : "");gap:.5rem;align-items:center">
+                            <input type="checkbox" checked="@r.Inkludert"
+                                disabled="@(!harTreff)"
+                                style="width:15px;height:15px;flex-shrink:0"
+                                @onchange="() => r.Inkludert = !r.Inkludert" />
+                            <div style="flex:1;font-size:.88rem">@r.Søkenavn</div>
+                            @if (r.Laster)
+                            {
+                                <div style="flex:1;font-size:.85rem" class="muted">Søker…</div>
+                                <div style="width:100px"></div>
+                                <div style="width:60px"></div>
+                            }
+                            else if (r.Enhet is not null)
+                            {
+                                <div style="flex:1.2;font-size:.88rem">@r.Enhet.navn</div>
+                                <div style="width:100px;font-family:monospace;font-size:.85rem">@r.Enhet.organisasjonsnummer</div>
+                                <div style="width:60px;font-size:.8rem" class="muted">@r.Enhet.organisasjonsform?.kode</div>
+                            }
+                            else
+                            {
+                                <div style="flex:1;font-size:.85rem;font-style:italic" class="muted">Ikke funnet</div>
+                                <div style="width:100px"></div>
+                                <div style="width:60px"></div>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    }
     else if (step == 3)
     {
         <div class="wizard-body">
@@ -564,6 +641,20 @@
     string? previewError;
     string? searchError;
     bool saving, previewLoading, validating, searching;
+
+    // Navneliste-oppslag
+    string navnInput = "";
+    bool navnLoading;
+    int navnProgressIdx, navnTotalt;
+    List<NavnRad> navnResultater = [];
+
+    class NavnRad(string søkenavn)
+    {
+        public string Søkenavn { get; } = søkenavn;
+        public BrregEnhet? Enhet { get; set; }
+        public bool Laster { get; set; } = true;
+        public bool Inkludert { get; set; } = true;
+    }
     List<BrregEnhet> previewResults = [];
     List<OrgnrValidationResult> validationResults = [];
     List<BrregEnhet> searchResults = [];
@@ -579,6 +670,7 @@
     void VelgDynamisk()     { type = "dynamic"; }
     void VelgStatiskOrgnr() { type = "static-orgnr"; }
     void VelgStatiskSok()   { type = "static-search"; }
+    void VelgStatiskNavn()  { type = "static-navn"; }
 
     void OnNaceSelected()
     {
@@ -593,6 +685,7 @@
         "dynamic" => "Dynamisk",
         "static-orgnr" => "Statisk (orgnr-liste)",
         "static-search" => "Statisk (søk og velg)",
+        "static-navn" => "Statisk (navneliste)",
         _ => type
     };
 
@@ -601,6 +694,7 @@
         "dynamic" => previewResults.Count,
         "static-orgnr" => validationResults.Count(r => r.Status == ValidationStatus.Ok),
         "static-search" => selectedOrgnrs.Count,
+        "static-navn" => navnResultater.Count(r => r.Enhet is not null && r.Inkludert),
         _ => 0
     };
 
@@ -622,6 +716,34 @@
         var lines = orgnrInput.Split(['\n', '\r', ';', ','], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         validationResults = await Brreg.ValidateOrgnrListAsync(lines);
         validating = false;
+    }
+
+    async Task SlåOppNavnAsync()
+    {
+        var linjer = navnInput
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(l => !string.IsNullOrWhiteSpace(l))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        if (!linjer.Any()) return;
+
+        navnLoading = true;
+        navnProgressIdx = 0;
+        navnTotalt = linjer.Count;
+        navnResultater = linjer.Select(l => new NavnRad(l)).ToList();
+
+        for (int i = 0; i < navnResultater.Count; i++)
+        {
+            navnProgressIdx = i + 1;
+            var rad = navnResultater[i];
+            var treff = await Brreg.SearchAsync(rad.Søkenavn, size: 1);
+            rad.Enhet = treff.FirstOrDefault();
+            rad.Laster = false;
+            rad.Inkludert = rad.Enhet is not null;
+            StateHasChanged();
+        }
+
+        navnLoading = false;
     }
 
     async Task SearchBrregAsync(int page = 0)
@@ -662,6 +784,9 @@
             {
                 var recipients = type == "static-orgnr"
                     ? validationResults.Where(r => r.Status == ValidationStatus.Ok && r.Enhet is not null)
+                        .Select(r => TargetGroupService.BrregEnhetToRecipient(r.Enhet!)).ToList()
+                    : type == "static-navn"
+                    ? navnResultater.Where(r => r.Enhet is not null && r.Inkludert)
                         .Select(r => TargetGroupService.BrregEnhetToRecipient(r.Enhet!)).ToList()
                     : selectedOrgnrs.Where(o => selectedEnheter.ContainsKey(o))
                         .Select(o => TargetGroupService.BrregEnhetToRecipient(selectedEnheter[o])).ToList();
