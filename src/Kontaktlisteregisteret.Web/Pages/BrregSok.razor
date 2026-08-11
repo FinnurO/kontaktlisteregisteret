@@ -1,5 +1,6 @@
 @page "/brreg"
 @inject IBrregService Brreg
+@inject SsbKlassService SsbKlass
 
 <PageTitle>Brreg-søk — Kontaktlisteregisteret</PageTitle>
 
@@ -38,6 +39,13 @@
             <option value="Idrettshall" /><option value="Svømmehall" /><option value="Brannstasjon" />
             <option value="Vannverk" /><option value="NAV" /><option value="Avfallshåndtering" />
         </datalist>
+        <select class="form-input" style="max-width:260px" @bind="sektorFilter">
+            <option value="">Alle sektorer</option>
+            @foreach (var k in sektorkoder)
+            {
+                <option value="@k.Code">@k.Code – @k.Name</option>
+            }
+        </select>
         <span class="muted">@Filtered.Count av @results.Count treff</span>
     </div>
 }
@@ -262,6 +270,10 @@ else
 @code {
     string fane = "enkelt";
 
+    // B-22: SSB KLASS sektorkoder (dynamisk fra API)
+    List<KlassKode> sektorkoder = [];
+    string sektorFilter = "";
+
     // Enkeltoppslag
     string query = "";
     string aktivitetFilter = "";
@@ -310,9 +322,17 @@ else
         masseLoading = false;
     }
 
-    List<BrregEnhet> Filtered => string.IsNullOrWhiteSpace(aktivitetFilter) ? results
-        : results.Where(e => e.aktivitet?.Any(a =>
-            a.Contains(aktivitetFilter, StringComparison.OrdinalIgnoreCase)) == true).ToList();
+    protected override async Task OnInitializedAsync()
+    {
+        sektorkoder = await SsbKlass.GetSektorkodeAsync();
+    }
+
+    List<BrregEnhet> Filtered => results
+        .Where(e => string.IsNullOrWhiteSpace(aktivitetFilter) ||
+            e.aktivitet?.Any(a => a.Contains(aktivitetFilter, StringComparison.OrdinalIgnoreCase)) == true)
+        .Where(e => string.IsNullOrWhiteSpace(sektorFilter) ||
+            e.institusjonellSektorkode?.kode?.StartsWith(sektorFilter) == true)
+        .ToList();
     Dictionary<string, List<BrregEnhet>> children = [];
     Dictionary<string, string?> childrenErrors = [];
     HashSet<string> childrenLoading = [];

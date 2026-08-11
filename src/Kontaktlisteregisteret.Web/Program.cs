@@ -45,6 +45,13 @@ else
     });
 }
 
+builder.Services.AddMemoryCache();
+builder.Services.AddHttpClient<SsbKlassService>(c =>
+{
+    c.BaseAddress = new Uri("https://data.ssb.no");
+    c.Timeout = TimeSpan.FromSeconds(10);
+});
+
 builder.Services.AddScoped<TargetGroupService>();
 builder.Services.AddScoped<AdresselisteService>();
 builder.Services.AddScoped<AbonnementslisteService>();
