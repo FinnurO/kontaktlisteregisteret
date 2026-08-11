@@ -38,6 +38,7 @@ else
             {
                 <button class="btn" @onclick="ExportJsonAsync">↓ JSON</button>
                 <button class="btn" @onclick="ExportCsvAsync">↓ CSV</button>
+                <button class="btn" @onclick="ExportXlsxAsync">↓ Excel</button>
             }
         </div>
     </div>
@@ -747,6 +748,17 @@ else
             sb.AppendLine($"\"{m.Recipient.ExternalId}\",\"{m.Recipient.Name}\",\"{m.Recipient.Type.ToString().ToLower()}\",\"{m.Recipient.OrgForm}\",\"{m.Recipient.PostalCode}\",\"{m.Recipient.PostalCity}\"");
         var b64 = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(sb.ToString()));
         await JS.InvokeVoidAsync("downloadFile", $"{SanitiserFilnavn(liste.Tittel)}.csv", "text/csv", b64);
+    }
+
+    async Task ExportXlsxAsync()
+    {
+        if (liste is null) return;
+        var bytes = await Svc.ExportXlsxAsync(liste.Id);
+        var b64 = Convert.ToBase64String(bytes);
+        await JS.InvokeVoidAsync("downloadFile",
+            $"adresseliste-{liste.Id}.xlsx",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            b64);
     }
 
     static string StatusLabel(AdresselisteStatus s) => s switch

@@ -1,3 +1,4 @@
+using ClosedXML.Excel;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Kontaktlisteregisteret.Web.Data;
@@ -282,6 +283,48 @@ public class AdresselisteService(AppDbContext db)
             db.Adresselister.Remove(liste);
             await db.SaveChangesAsync();
         }
+    }
+
+    // ── Eksport ──────────────────────────────────────────────────────────────
+
+    /// Lager en Excel-fil (.xlsx) med snapshot-mottakerne fra en låst adresseliste.
+    /// Returnerer filinnholdet som byte-array.
+    public async Task<byte[]> ExportXlsxAsync(int listeId)
+    {
+        var mottakere = await db.AdresselisteMottakere
+            .Where(m => m.AdresselisteId == listeId)
+            .Include(m => m.Recipient)
+            .ToListAsync();
+
+        using var workbook = new XLWorkbook();
+        var ws = workbook.Worksheets.Add("Mottakere");
+
+        // Kolonneoverskrifter i rad 1
+        ws.Cell(1, 1).Value = "Orgnr";
+        ws.Cell(1, 2).Value = "BrregNavn";
+        ws.Cell(1, 3).Value = "Visningsnavn";
+        ws.Cell(1, 4).Value = "CoAdresse";
+
+        // Fet overskrift
+        var headerRow = ws.Row(1);
+        headerRow.Style.Font.Bold = true;
+
+        // Data fra rad 2
+        var row = 2;
+        foreach (var m in mottakere)
+        {
+            ws.Cell(row, 1).Value = m.Recipient.ExternalId;
+            ws.Cell(row, 2).Value = m.Recipient.Name;
+            ws.Cell(row, 3).Value = m.Visningsnavn ?? "";
+            ws.Cell(row, 4).Value = m.CoAdresse ?? "";
+            row++;
+        }
+
+        ws.Columns().AdjustToContents();
+
+        using var stream = new MemoryStream();
+        workbook.SaveAs(stream);
+        return stream.ToArray();
     }
 
     /// Live union av alle tilknyttede målgrupper (for ulåste lister)

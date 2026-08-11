@@ -4,7 +4,7 @@
     {
       "name": "kontaktlisteregisteret",
       "runtimeExecutable": "dotnet",
-      "runtimeArgs": ["run", "--urls", "http://localhost:5101"],
+      "runtimeArgs": ["run", "--project", "src/Kontaktlisteregisteret.Web", "--urls", "http://localhost:5101"],
       "port": 5101
     }
   ]
