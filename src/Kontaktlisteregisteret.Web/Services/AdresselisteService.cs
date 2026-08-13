@@ -280,6 +280,22 @@ public class AdresselisteService(AppDbContext db, VarslingsService varslinger, A
         return kopi;
     }
 
+    public async Task LåsOppAsync(int id)
+    {
+        var liste = await db.Adresselister.FindAsync(id);
+        if (liste is null || liste.Status != AdresselisteStatus.Låst)
+            throw new InvalidOperationException("Listen er ikke låst.");
+
+        var mottakere = await db.AdresselisteMottakere
+            .Where(m => m.AdresselisteId == id)
+            .ToListAsync();
+        db.AdresselisteMottakere.RemoveRange(mottakere);
+
+        liste.Status = AdresselisteStatus.Klar;
+        await db.SaveChangesAsync();
+        await auditLog.LogAsync("Låst opp", "Adresseliste", id, liste.Tittel, virksomhetId: liste.VirksomhetId);
+    }
+
     public async Task DeleteAsync(int id)
     {
         var liste = await db.Adresselister.FindAsync(id);
