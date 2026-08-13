@@ -1,5 +1,6 @@
 @page "/admin/virksomheter"
 @inject VirksomhetService Svc
+@inject IBrregService BrregSvc
 @inject NavigationManager Nav
 
 <PageTitle>Virksomheter — Admin</PageTitle>
@@ -25,14 +26,33 @@
         <div style="display:grid;gap:.75rem">
             <div>
                 <label class="form-label">Organisasjonsnummer <span style="color:var(--danger)">*</span></label>
-                <input class="form-input" type="text" maxlength="9" placeholder="991825827"
-                       @bind="nyttOrgnr" @bind:event="oninput" style="max-width:180px;font-family:monospace" />
+                <div style="display:flex;gap:8px;align-items:center">
+                    <input class="form-input" type="text" maxlength="9" placeholder="991825827"
+                           @bind="nyttOrgnr" @bind:event="oninput"
+                           @onblur="SlåOppOrgnrAsync"
+                           style="max-width:180px;font-family:monospace" />
+                    @if (slårOpp)
+                    {
+                        <span class="muted" style="font-size:13px">Slår opp…</span>
+                    }
+                </div>
             </div>
             <div>
                 <label class="form-label">Virksomhetsnavn <span style="color:var(--danger)">*</span></label>
                 <input class="form-input" type="text" placeholder="f.eks. Digitaliseringsdirektoratet"
-                       @bind="nyttNavn" @bind:event="oninput" />
+                       @bind="nyttNavn" @bind:event="oninput"
+                       readonly="@brregFunnet" />
             </div>
+            @if (!string.IsNullOrEmpty(brregFeil))
+            {
+                <div class="form-error">@brregFeil</div>
+            }
+            @if (brregFunnet && !string.IsNullOrEmpty(nyttOrgnr) && !string.IsNullOrEmpty(nyttNavn))
+            {
+                <div style="padding:8px 12px;background:var(--green-50,#f0fdf4);border:1px solid var(--green-200,#bbf7d0);border-radius:var(--radius-md);font-size:13px">
+                    Fant: <strong>@nyttNavn</strong> (<span style="font-family:monospace">@nyttOrgnr</span>)
+                </div>
+            }
             @if (!string.IsNullOrEmpty(skjemaFeil))
             {
                 <div class="form-error">@skjemaFeil</div>
@@ -104,11 +124,37 @@ else
     string nyttNavn = string.Empty;
     string skjemaFeil = string.Empty;
     bool lagrer;
+    bool slårOpp;
+    bool brregFunnet;
+    string? brregFeil;
 
     protected override async Task OnInitializedAsync()
     {
         virksomheter = await Svc.GetAllAsync();
         loading = false;
+    }
+
+    async Task SlåOppOrgnrAsync()
+    {
+        brregFeil = null;
+        brregFunnet = false;
+        var orgnr = nyttOrgnr.Trim();
+        if (orgnr.Length != 9 || !orgnr.All(char.IsDigit)) return;
+
+        slårOpp = true;
+        var enhet = await BrregSvc.GetByOrgnrAsync(orgnr);
+        slårOpp = false;
+
+        if (enhet is null)
+        {
+            brregFeil = $"Fant ingen virksomhet med orgnr {orgnr} i Brreg.";
+            nyttNavn = string.Empty;
+        }
+        else
+        {
+            nyttNavn = enhet.navn;
+            brregFunnet = true;
+        }
     }
 
     async Task OnboardAsync()
@@ -126,6 +172,8 @@ else
 
         nyttOrgnr = string.Empty;
         nyttNavn = string.Empty;
+        brregFunnet = false;
+        brregFeil = null;
         visSkjema = false;
         lagrer = false;
         virksomheter = await Svc.GetAllAsync();
