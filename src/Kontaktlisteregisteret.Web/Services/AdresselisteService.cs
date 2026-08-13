@@ -36,6 +36,15 @@ public class AdresselisteService(AppDbContext db, VarslingsService varslinger, A
             .Include(a => a.Mottakere).ThenInclude(m => m.Recipient)
             .FirstOrDefaultAsync(a => a.Id == id);
 
+    public async Task<Adresseliste?> GetAsync(int id, int virksomhetId) =>
+        await db.Adresselister
+            .Include(a => a.Målgrupper).ThenInclude(m => m.Målgruppe)
+                .ThenInclude(g => g.Members).ThenInclude(m => m.Recipient)
+            .Include(a => a.Abonnementslister).ThenInclude(k => k.Abonnementsliste)
+                .ThenInclude(l => l.Abonnenter)
+            .Include(a => a.Mottakere).ThenInclude(m => m.Recipient)
+            .FirstOrDefaultAsync(a => a.Id == id && a.VirksomhetId == virksomhetId);
+
     /// Returnerer kun Låste lister — for API-eksponering
     public async Task<List<Adresseliste>> GetLåsteAsync() =>
         await db.Adresselister
@@ -278,6 +287,22 @@ public class AdresselisteService(AppDbContext db, VarslingsService varslinger, A
             });
         await db.SaveChangesAsync();
         return kopi;
+    }
+
+    public async Task LåsOppAsync(int id)
+    {
+        var liste = await db.Adresselister.FindAsync(id);
+        if (liste is null || liste.Status != AdresselisteStatus.Låst)
+            throw new InvalidOperationException("Listen er ikke låst.");
+
+        var mottakere = await db.AdresselisteMottakere
+            .Where(m => m.AdresselisteId == id)
+            .ToListAsync();
+        db.AdresselisteMottakere.RemoveRange(mottakere);
+
+        liste.Status = AdresselisteStatus.Klar;
+        await db.SaveChangesAsync();
+        await auditLog.LogAsync("Låst opp", "Adresseliste", id, liste.Tittel, virksomhetId: liste.VirksomhetId);
     }
 
     public async Task DeleteAsync(int id)

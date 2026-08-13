@@ -39,6 +39,7 @@ else
                 <button class="btn" @onclick="ExportJsonAsync">↓ JSON</button>
                 <button class="btn" @onclick="ExportCsvAsync">↓ CSV</button>
                 <button class="btn" @onclick="ExportXlsxAsync">↓ Excel</button>
+                <button class="btn" @onclick="() => bekreftLåsOpp = true">🔓 Lås opp</button>
             }
         </div>
     </div>
@@ -53,6 +54,15 @@ else
         @if (!string.IsNullOrEmpty(liste.OpprettetAv))
         { <span class="muted">av @liste.OpprettetAv</span> }
     </div>
+
+    @if (bekreftLåsOpp)
+    {
+        <div class="alert-error" style="margin-bottom:16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+            <span>Er du sikker? Dette sletter snapshoten.</span>
+            <button class="btn btn-sm btn-danger" @onclick="LåsOppAsync">Bekreft</button>
+            <button class="btn btn-sm" @onclick="() => bekreftLåsOpp = false">Avbryt</button>
+        </div>
+    }
 
     @* ── Beskrivelse ──────────────────────────────────────────────────────── *@
     @if (liste.Status != AdresselisteStatus.Låst || !string.IsNullOrEmpty(liste.Beskrivelse))
@@ -523,6 +533,7 @@ else
         expandedOrg = expandedOrg == orgnr ? null : orgnr;
     bool velgerMålgruppe, velgerAbonnementsliste, låser, trevisning;
     bool redigererTittel, redigererBeskrivelse;
+    bool bekreftLåsOpp;
     string editTittel = "", editBeskrivelse = "";
     string? låsError;
     int valgtMålgruppeId;
@@ -703,6 +714,13 @@ else
         if (!ok) { låsError = error; låser = false; return; }
         await LoadAsync();
         låser = false;
+    }
+
+    async Task LåsOppAsync()
+    {
+        await Svc.LåsOppAsync(Id);
+        bekreftLåsOpp = false;
+        await LoadAsync();
     }
 
     // ── Eksport ──────────────────────────────────────────────────────────────
