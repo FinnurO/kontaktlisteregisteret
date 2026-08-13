@@ -232,7 +232,11 @@ public class TargetGroupService(AppDbContext db, IBrregService brreg, AuditLogSe
             postalCity = m.Recipient.PostalCity,
             isActive = m.Recipient.IsActive
         });
-        return System.Text.Encoding.UTF8.GetBytes(JsonSerializer.Serialize(output, new JsonSerializerOptions { WriteIndented = true }));
+        return System.Text.Encoding.UTF8.GetBytes(JsonSerializer.Serialize(output, new JsonSerializerOptions
+        {
+            WriteIndented = true,
+            Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+        }));
     }
 
     public async Task<byte[]> ExportCsvAsync(int groupId)
