@@ -72,12 +72,13 @@ using (var scope = app.Services.CreateScope())
         // Kjør ventende migrasjoner — oppretter databasen om den ikke finnes ennå
         await db.Database.MigrateAsync();
     }
-    catch
+    catch (Exception ex)
     {
-        // Databasen ble opprettet med EnsureCreated og mangler migrasjonshistorikk —
-        // slett og opprett på nytt via migrasjoner
-        db.Database.EnsureDeleted();
-        await db.Database.MigrateAsync();
+        // Ikke slett en eksisterende database dersom migrering feiler. En feil her kan
+        // skyldes blant annet feil tilkoblingsstreng, manglende rettigheter eller en
+        // uforenlig migrering og må håndteres eksplisitt av operatøren.
+        app.Logger.LogCritical(ex, "Kunne ikke migrere databasen. Oppstart avbrytes uten å endre eksisterende data.");
+        throw;
     }
     if (!app.Configuration.GetValue<bool>("SkipSeed"))
         await SeedAsync(db);
