@@ -60,6 +60,8 @@ builder.Services.AddScoped<VirksomhetService>();
 builder.Services.AddScoped<VirksomhetContext>();
 builder.Services.AddScoped<VarslingsService>();
 
+builder.Services.AddOpenApi();
+
 var app = builder.Build();
 
 // ── Database setup + seed ────────────────────────────────────────────────────
@@ -87,6 +89,7 @@ using (var scope = app.Services.CreateScope())
 // ── API v1 ────────────────────────────────────────────────────────────────────
 
 app.MapApiV1();
+app.MapOpenApi();
 
 // ── Web ───────────────────────────────────────────────────────────────────────
 

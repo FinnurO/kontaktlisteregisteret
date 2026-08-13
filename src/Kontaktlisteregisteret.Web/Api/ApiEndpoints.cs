@@ -44,7 +44,10 @@ public static class ApiEndpoints
                 låstAt = a.LåstAt,
                 opprettetAt = a.OpprettetAt
             }));
-        });
+        })
+        .WithTags("Adresselister")
+        .WithSummary("Hent låste adresselister for virksomheten")
+        .WithOpenApi();
 
         // GET /api/v1/virksomheter/{orgnr}/adresselister/{id} — metadata for én låst liste
         api.MapGet("/adresselister/{id:int}", async (int id, HttpContext http, AppDbContext db) =>
@@ -67,7 +70,10 @@ public static class ApiEndpoints
                 låstAt = a.LåstAt,
                 opprettetAt = a.OpprettetAt
             });
-        });
+        })
+        .WithTags("Adresselister")
+        .WithSummary("Hent metadata for én låst adresseliste")
+        .WithOpenApi();
 
         // GET /api/v1/virksomheter/{orgnr}/adresselister/{id}/mottakere — snapshot-mottakere
         api.MapGet("/adresselister/{id:int}/mottakere", async (int id, HttpContext http, AppDbContext db) =>
@@ -100,7 +106,10 @@ public static class ApiEndpoints
                 } : null,
                 kildeMålgruppeId = m.KildeMålgruppeId
             }));
-        });
+        })
+        .WithTags("Adresselister")
+        .WithSummary("Hent snapshot-mottakere for en låst adresseliste")
+        .WithOpenApi();
 
         // GET /api/v1/virksomheter/{orgnr}/abonnementslister — abonnementslister for virksomheten
         api.MapGet("/abonnementslister", async (HttpContext http, AppDbContext db) =>
@@ -119,7 +128,10 @@ public static class ApiEndpoints
                 antallAbonnenter = l.Abonnenter.Count,
                 opprettetAt = l.OpprettetAt
             }));
-        });
+        })
+        .WithTags("Abonnementslister")
+        .WithSummary("Hent abonnementslister for virksomheten")
+        .WithOpenApi();
 
         // GET /api/v1/virksomheter/{orgnr}/abonnementslister/{id}/abonnenter — abonnenter for én liste
         api.MapGet("/abonnementslister/{id:int}/abonnenter", async (int id, HttpContext http, AppDbContext db) =>
@@ -140,7 +152,10 @@ public static class ApiEndpoints
                 lagtTilAt = a.LagtTilAt,
                 kilde = a.Kilde.ToString().ToLower()
             }));
-        });
+        })
+        .WithTags("Abonnementslister")
+        .WithSummary("Hent abonnenter for en abonnementsliste")
+        .WithOpenApi();
 
         // POST /api/v1/virksomheter/{orgnr}/abonnementslister/{id}/abonnenter — legg til abonnent
         // Body: { "epost": "navn@eksempel.no" }
@@ -164,7 +179,10 @@ public static class ApiEndpoints
                 epost = abonnent.Epost,
                 lagtTilAt = abonnent.LagtTilAt
             });
-        });
+        })
+        .WithTags("Abonnementslister")
+        .WithSummary("Legg til abonnent i abonnementsliste")
+        .WithOpenApi();
 
         // DELETE /api/v1/virksomheter/{orgnr}/abonnenter/{id} — fjern abonnent
         api.MapDelete("/abonnenter/{id:int}", async (int id, HttpContext http, AppDbContext db, AbonnementslisteService svc) =>
@@ -177,7 +195,10 @@ public static class ApiEndpoints
                 return Results.NotFound(new { error = "Abonnenten finnes ikke." });
             var ok = await svc.SlettAbonnentAsync(id);
             return ok ? Results.NoContent() : Results.NotFound(new { error = "Abonnenten finnes ikke." });
-        });
+        })
+        .WithTags("Abonnementslister")
+        .WithSummary("Fjern abonnent")
+        .WithOpenApi();
 
         // ── API v1: målgrupper ────────────────────────────────────────────────────────
         // Alle 4xx/5xx-svar bruker application/problem+json (RFC 9457).
@@ -187,7 +208,10 @@ public static class ApiEndpoints
         {
             var virksomhetId = (int)http.Items["VirksomhetId"]!;
             return Results.Ok((await svc.GetAllAsync(virksomhetId)).Select(MålgruppeShape));
-        });
+        })
+        .WithTags("Målgrupper")
+        .WithSummary("Hent alle målgrupper for virksomheten")
+        .WithOpenApi();
 
         // GET /api/v1/virksomheter/{orgnr}/malgrupper/{id}
         api.MapGet("/malgrupper/{id:int}", async (int id, HttpContext http, TargetGroupService svc) =>
@@ -199,7 +223,10 @@ public static class ApiEndpoints
                     detail: $"Målgruppe {id} finnes ikke.",
                     type: "https://kontaktlisteregisteret.no/problems/ikke-funnet")
                 : Results.Ok(MålgruppeShape(g));
-        });
+        })
+        .WithTags("Målgrupper")
+        .WithSummary("Hent én målgruppe")
+        .WithOpenApi();
 
         // GET /api/v1/virksomheter/{orgnr}/malgrupper/{id}/medlemmer?page=1&size=50
         api.MapGet("/malgrupper/{id:int}/medlemmer", async (int id, HttpContext http, int? page, int? size, TargetGroupService svc) =>
@@ -225,7 +252,10 @@ public static class ApiEndpoints
                 coAdresse = m.CoAdresse
             });
             return Results.Ok(new { items, page = p, size = s, totalCount = alle.Count });
-        });
+        })
+        .WithTags("Målgrupper")
+        .WithSummary("Hent paginerte mottakere for en målgruppe")
+        .WithOpenApi();
 
         // GET /api/v1/virksomheter/{orgnr}/malgrupper/{id}/eksport.json — JSON-filnedlasting
         api.MapGet("/malgrupper/{id:int}/eksport.json", async (int id, HttpContext http, TargetGroupService svc) =>
@@ -246,7 +276,10 @@ public static class ApiEndpoints
                     detail: $"Målgruppe {id} finnes ikke.",
                     type: "https://kontaktlisteregisteret.no/problems/ikke-funnet");
             }
-        });
+        })
+        .WithTags("Målgrupper")
+        .WithSummary("Eksporter målgruppe som JSON-fil")
+        .WithOpenApi();
 
         // GET /api/v1/virksomheter/{orgnr}/malgrupper/{id}/eksport.csv — CSV-filnedlasting
         api.MapGet("/malgrupper/{id:int}/eksport.csv", async (int id, HttpContext http, TargetGroupService svc) =>
@@ -267,7 +300,10 @@ public static class ApiEndpoints
                     detail: $"Målgruppe {id} finnes ikke.",
                     type: "https://kontaktlisteregisteret.no/problems/ikke-funnet");
             }
-        });
+        })
+        .WithTags("Målgrupper")
+        .WithSummary("Eksporter målgruppe som CSV-fil")
+        .WithOpenApi();
 
         // POST /api/v1/virksomheter/{orgnr}/malgrupper — opprett statisk eller dynamisk målgruppe
         // For Statisk: validerer orgnr mot Brreg og legger til de som finnes (Ok).
@@ -336,7 +372,10 @@ public static class ApiEndpoints
 
             var nyGruppe = await svc.GetAsync(gruppe.Id);
             return Results.Created($"/api/v1/virksomheter/{routeOrgnr}/malgrupper/{gruppe.Id}", MålgruppeShape(nyGruppe!));
-        });
+        })
+        .WithTags("Målgrupper")
+        .WithSummary("Opprett statisk eller dynamisk målgruppe")
+        .WithOpenApi();
 
         // PATCH /api/v1/virksomheter/{orgnr}/malgrupper/{id} — endre navn
         api.MapPatch("/malgrupper/{id:int}", async (int id, HttpContext http, NavnEndreRequest req, TargetGroupService svc, AppDbContext db) =>
@@ -354,7 +393,10 @@ public static class ApiEndpoints
 
             await svc.UpdateNameAsync(id, req.Navn);
             return Results.NoContent();
-        });
+        })
+        .WithTags("Målgrupper")
+        .WithSummary("Endre navn på målgruppe")
+        .WithOpenApi();
 
         // PUT /api/v1/virksomheter/{orgnr}/malgrupper/{id}/kriterier — oppdater filterregler og resynkroniser mot Brreg
         // OBS: Kallet kan ta 10–30 s — SyncDynamicGroupAsync henter alle sider fra Brreg sekvensiell.
@@ -378,7 +420,10 @@ public static class ApiEndpoints
 
             var oppdatert = await svc.GetAsync(id, virksomhetId);
             return Results.Ok(new { antallMedlemmer = oppdatert!.Members.Count });
-        });
+        })
+        .WithTags("Målgrupper")
+        .WithSummary("Oppdater filterregler og resynkroniser dynamisk målgruppe")
+        .WithOpenApi();
 
         // DELETE /api/v1/virksomheter/{orgnr}/malgrupper/{id}
         // Blokkeres med 409 hvis målgruppen er koblet til en låst adresseliste.
@@ -405,7 +450,10 @@ public static class ApiEndpoints
             db.TargetGroups.Remove(g);
             await db.SaveChangesAsync();
             return Results.NoContent();
-        });
+        })
+        .WithTags("Målgrupper")
+        .WithSummary("Slett målgruppe")
+        .WithOpenApi();
 
         // ── Admin API: virksomheter ──────────────────────────────────────────────────
         // Krever Maskinporten-scope digdir:kontaktliste.admin i produksjon.
@@ -424,7 +472,10 @@ public static class ApiEndpoints
                 onboardetAt = v.OnboardetAt,
                 onboardetAv = v.OnboardetAv
             }));
-        });
+        })
+        .WithTags("Admin")
+        .WithSummary("Hent alle onboardede virksomheter")
+        .WithOpenApi();
 
         adminApi.MapPost("/virksomheter", async (VirksomhetOnboardRequest req, VirksomhetService svc) =>
         {
@@ -438,13 +489,19 @@ public static class ApiEndpoints
                 status = v.Status.ToString().ToLower(),
                 onboardetAt = v.OnboardetAt
             });
-        });
+        })
+        .WithTags("Admin")
+        .WithSummary("Onboard ny virksomhet")
+        .WithOpenApi();
 
         adminApi.MapDelete("/virksomheter/{id:int}", async (int id, VirksomhetService svc) =>
         {
             var ok = await svc.SlettAsync(id);
             return ok ? Results.NoContent() : Results.NotFound(new { error = "Virksomheten finnes ikke." });
-        });
+        })
+        .WithTags("Admin")
+        .WithSummary("Slett virksomhet")
+        .WithOpenApi();
 
         return app;
     }
