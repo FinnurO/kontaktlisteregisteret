@@ -29,6 +29,11 @@ public class TargetGroupService(AppDbContext db, IBrregService brreg, AuditLogSe
             .Include(g => g.Members).ThenInclude(m => m.Recipient)
             .FirstOrDefaultAsync(g => g.Id == id);
 
+    public async Task<TargetGroup?> GetAsync(int id, int virksomhetId) =>
+        await db.TargetGroups
+            .Include(g => g.Members).ThenInclude(m => m.Recipient)
+            .FirstOrDefaultAsync(g => g.Id == id && g.VirksomhetId == virksomhetId);
+
     public async Task<TargetGroup> CreateDynamicAsync(
         string name, TargetGroupScope scope, DynamicCriteria criteria, int? virksomhetId = null)
     {
