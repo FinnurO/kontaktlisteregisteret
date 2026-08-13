@@ -131,10 +131,15 @@ else
     string redigerBeskrivelse = string.Empty;
     string redigerFeil = string.Empty;
 
+    private Task<Abonnementsliste?> HentListeAsync() =>
+        Ctx.Current is not null
+            ? Svc.GetAsync(Id, Ctx.Current.Id)
+            : Svc.GetAsync(Id);
+
     protected override async Task OnParametersSetAsync()
     {
         await Ctx.LoadAsync(Orgnr);
-        liste = await Svc.GetAsync(Id);
+        liste = await HentListeAsync();
     }
 
     async Task TastNed(KeyboardEventArgs e)
@@ -152,7 +157,7 @@ else
         if (ok)
         {
             nyEpost = string.Empty;
-            liste = await Svc.GetAsync(Id);
+            liste = await HentListeAsync();
         }
         else
         {
@@ -165,7 +170,7 @@ else
     async Task SlettAbonnentAsync(int abonnentId)
     {
         await Svc.SlettAbonnentAsync(abonnentId);
-        liste = await Svc.GetAsync(Id);
+        liste = await HentListeAsync();
     }
 
     void StartRedigering()
@@ -184,7 +189,7 @@ else
             return;
         }
         await Svc.OppdaterAsync(Id, redigerNavn, redigerBeskrivelse);
-        liste = await Svc.GetAsync(Id);
+        liste = await HentListeAsync();
         redigerer = false;
     }
 

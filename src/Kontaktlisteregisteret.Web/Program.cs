@@ -88,13 +88,24 @@ using (var scope = app.Services.CreateScope())
 // Maskinporten-token med scope digdir:kontaktliste.read kreves i produksjon.
 // I PoC er autentisering ikke aktivert.
 
-var api = app.MapGroup("/api/v1");
+var api = app.MapGroup("/api/v1/virksomheter/{orgnr}")
+    .AddEndpointFilter(async (context, next) =>
+    {
+        var orgnr = context.HttpContext.Request.RouteValues["orgnr"]?.ToString();
+        var svc = context.HttpContext.RequestServices.GetRequiredService<VirksomhetService>();
+        var virksomhet = await svc.GetAktivByOrgnrAsync(orgnr ?? "");
+        if (virksomhet is null)
+            return Results.NotFound(new { error = "Virksomheten finnes ikke eller er ikke aktiv." });
+        context.HttpContext.Items["VirksomhetId"] = virksomhet.Id;
+        return await next(context);
+    });
 
-// GET /api/v1/adresselister — liste over låste adresselister
-api.MapGet("/adresselister", async (AppDbContext db) =>
+// GET /api/v1/virksomheter/{orgnr}/adresselister — låste adresselister for virksomheten
+api.MapGet("/adresselister", async (HttpContext http, AppDbContext db) =>
 {
+    var virksomhetId = (int)http.Items["VirksomhetId"]!;
     var lister = await db.Adresselister
-        .Where(a => a.Status == AdresselisteStatus.Låst)
+        .Where(a => a.Status == AdresselisteStatus.Låst && a.VirksomhetId == virksomhetId)
         .Include(a => a.Mottakere)
         .OrderByDescending(a => a.LåstAt)
         .ToListAsync();
@@ -111,11 +122,12 @@ api.MapGet("/adresselister", async (AppDbContext db) =>
     }));
 });
 
-// GET /api/v1/adresselister/{id} — metadata for én låst liste
-api.MapGet("/adresselister/{id:int}", async (int id, AppDbContext db) =>
+// GET /api/v1/virksomheter/{orgnr}/adresselister/{id} — metadata for én låst liste
+api.MapGet("/adresselister/{id:int}", async (int id, HttpContext http, AppDbContext db) =>
 {
+    var virksomhetId = (int)http.Items["VirksomhetId"]!;
     var a = await db.Adresselister
-        .Where(x => x.Id == id && x.Status == AdresselisteStatus.Låst)
+        .Where(x => x.Id == id && x.Status == AdresselisteStatus.Låst && x.VirksomhetId == virksomhetId)
         .Include(x => x.Mottakere)
         .FirstOrDefaultAsync();
 
@@ -133,11 +145,12 @@ api.MapGet("/adresselister/{id:int}", async (int id, AppDbContext db) =>
     });
 });
 
-// GET /api/v1/adresselister/{id}/mottakere — snapshot-mottakere
-api.MapGet("/adresselister/{id:int}/mottakere", async (int id, AppDbContext db) =>
+// GET /api/v1/virksomheter/{orgnr}/adresselister/{id}/mottakere — snapshot-mottakere
+api.MapGet("/adresselister/{id:int}/mottakere", async (int id, HttpContext http, AppDbContext db) =>
 {
+    var virksomhetId = (int)http.Items["VirksomhetId"]!;
     var finnes = await db.Adresselister
-        .AnyAsync(a => a.Id == id && a.Status == AdresselisteStatus.Låst);
+        .AnyAsync(a => a.Id == id && a.Status == AdresselisteStatus.Låst && a.VirksomhetId == virksomhetId);
 
     if (!finnes) return Results.NotFound(new { error = "Adresselisten finnes ikke eller er ikke låst." });
 
@@ -165,10 +178,12 @@ api.MapGet("/adresselister/{id:int}/mottakere", async (int id, AppDbContext db) 
     }));
 });
 
-// GET /api/v1/abonnementslister — liste over alle abonnementslister
-api.MapGet("/abonnementslister", async (AppDbContext db) =>
+// GET /api/v1/virksomheter/{orgnr}/abonnementslister — abonnementslister for virksomheten
+api.MapGet("/abonnementslister", async (HttpContext http, AppDbContext db) =>
 {
+    var virksomhetId = (int)http.Items["VirksomhetId"]!;
     var lister = await db.Abonnementslister
+        .Where(l => l.VirksomhetId == virksomhetId)
         .Include(l => l.Abonnenter)
         .OrderByDescending(l => l.OpprettetAt)
         .ToListAsync();
@@ -182,10 +197,11 @@ api.MapGet("/abonnementslister", async (AppDbContext db) =>
     }));
 });
 
-// GET /api/v1/abonnementslister/{id}/abonnenter — abonnenter for én liste
-api.MapGet("/abonnementslister/{id:int}/abonnenter", async (int id, AppDbContext db) =>
+// GET /api/v1/virksomheter/{orgnr}/abonnementslister/{id}/abonnenter — abonnenter for én liste
+api.MapGet("/abonnementslister/{id:int}/abonnenter", async (int id, HttpContext http, AppDbContext db) =>
 {
-    if (!await db.Abonnementslister.AnyAsync(l => l.Id == id))
+    var virksomhetId = (int)http.Items["VirksomhetId"]!;
+    if (!await db.Abonnementslister.AnyAsync(l => l.Id == id && l.VirksomhetId == virksomhetId))
         return Results.NotFound(new { error = "Abonnementslisten finnes ikke." });
 
     var abonnenter = await db.Abonnenter
@@ -202,18 +218,23 @@ api.MapGet("/abonnementslister/{id:int}/abonnenter", async (int id, AppDbContext
     }));
 });
 
-// POST /api/v1/abonnementslister/{id}/abonnenter — legg til abonnent i liste
+// POST /api/v1/virksomheter/{orgnr}/abonnementslister/{id}/abonnenter — legg til abonnent
 // Body: { "epost": "navn@eksempel.no" }
 api.MapPost("/abonnementslister/{id:int}/abonnenter",
-    async (int id, AbonnentRegistrerRequest req, AbonnementslisteService svc) =>
+    async (int id, HttpContext http, AbonnentRegistrerRequest req, AppDbContext db, AbonnementslisteService svc) =>
 {
     if (string.IsNullOrWhiteSpace(req.Epost))
         return Results.BadRequest(new { error = "E-post er påkrevd." });
 
+    var virksomhetId = (int)http.Items["VirksomhetId"]!;
+    if (!await db.Abonnementslister.AnyAsync(l => l.Id == id && l.VirksomhetId == virksomhetId))
+        return Results.NotFound(new { error = "Abonnementslisten finnes ikke." });
+
     var (ok, error, abonnent) = await svc.LeggTilAsync(id, req.Epost, AbonnentKilde.Api);
     if (!ok) return Results.Conflict(new { error });
 
-    return Results.Created($"/api/v1/abonnementslister/{id}/abonnenter/{abonnent!.Id}", new
+    var routeOrgnr = http.Request.RouteValues["orgnr"]?.ToString();
+    return Results.Created($"/api/v1/virksomheter/{routeOrgnr}/abonnementslister/{id}/abonnenter/{abonnent!.Id}", new
     {
         id = abonnent.Id,
         epost = abonnent.Epost,
@@ -221,9 +242,15 @@ api.MapPost("/abonnementslister/{id:int}/abonnenter",
     });
 });
 
-// DELETE /api/v1/abonnenter/{id} — fjern abonnent (uavhengig av liste)
-api.MapDelete("/abonnenter/{id:int}", async (int id, AbonnementslisteService svc) =>
+// DELETE /api/v1/virksomheter/{orgnr}/abonnenter/{id} — fjern abonnent
+api.MapDelete("/abonnenter/{id:int}", async (int id, HttpContext http, AppDbContext db, AbonnementslisteService svc) =>
 {
+    var virksomhetId = (int)http.Items["VirksomhetId"]!;
+    var tilhørerVirksomhet = await db.Abonnenter
+        .Where(a => a.Id == id)
+        .AnyAsync(a => a.Abonnementsliste.VirksomhetId == virksomhetId);
+    if (!tilhørerVirksomhet)
+        return Results.NotFound(new { error = "Abonnenten finnes ikke." });
     var ok = await svc.SlettAbonnentAsync(id);
     return ok ? Results.NoContent() : Results.NotFound(new { error = "Abonnenten finnes ikke." });
 });
@@ -231,14 +258,18 @@ api.MapDelete("/abonnenter/{id:int}", async (int id, AbonnementslisteService svc
 // ── API v1: målgrupper ────────────────────────────────────────────────────────
 // Alle 4xx/5xx-svar bruker application/problem+json (RFC 9457).
 
-// GET /api/v1/malgrupper — alle målgrupper på tvers av virksomheter
-api.MapGet("/malgrupper", async (TargetGroupService svc) =>
-    Results.Ok((await svc.GetAllAsync()).Select(MålgruppeShape)));
-
-// GET /api/v1/malgrupper/{id}
-api.MapGet("/malgrupper/{id:int}", async (int id, TargetGroupService svc) =>
+// GET /api/v1/virksomheter/{orgnr}/malgrupper — målgrupper for virksomheten
+api.MapGet("/malgrupper", async (HttpContext http, TargetGroupService svc) =>
 {
-    var g = await svc.GetAsync(id);
+    var virksomhetId = (int)http.Items["VirksomhetId"]!;
+    return Results.Ok((await svc.GetAllAsync(virksomhetId)).Select(MålgruppeShape));
+});
+
+// GET /api/v1/virksomheter/{orgnr}/malgrupper/{id}
+api.MapGet("/malgrupper/{id:int}", async (int id, HttpContext http, TargetGroupService svc) =>
+{
+    var virksomhetId = (int)http.Items["VirksomhetId"]!;
+    var g = await svc.GetAsync(id, virksomhetId);
     return g is null
         ? Results.Problem(title: "Målgruppe ikke funnet", statusCode: 404,
             detail: $"Målgruppe {id} finnes ikke.",
@@ -246,10 +277,11 @@ api.MapGet("/malgrupper/{id:int}", async (int id, TargetGroupService svc) =>
         : Results.Ok(MålgruppeShape(g));
 });
 
-// GET /api/v1/malgrupper/{id}/medlemmer?page=1&size=50
-api.MapGet("/malgrupper/{id:int}/medlemmer", async (int id, int? page, int? size, TargetGroupService svc) =>
+// GET /api/v1/virksomheter/{orgnr}/malgrupper/{id}/medlemmer?page=1&size=50
+api.MapGet("/malgrupper/{id:int}/medlemmer", async (int id, HttpContext http, int? page, int? size, TargetGroupService svc) =>
 {
-    var g = await svc.GetAsync(id);
+    var virksomhetId = (int)http.Items["VirksomhetId"]!;
+    var g = await svc.GetAsync(id, virksomhetId);
     if (g is null)
         return Results.Problem(title: "Målgruppe ikke funnet", statusCode: 404,
             detail: $"Målgruppe {id} finnes ikke.",
@@ -271,9 +303,14 @@ api.MapGet("/malgrupper/{id:int}/medlemmer", async (int id, int? page, int? size
     return Results.Ok(new { items, page = p, size = s, totalCount = alle.Count });
 });
 
-// GET /api/v1/malgrupper/{id}/eksport.json — JSON-filnedlasting
-api.MapGet("/malgrupper/{id:int}/eksport.json", async (int id, TargetGroupService svc) =>
+// GET /api/v1/virksomheter/{orgnr}/malgrupper/{id}/eksport.json — JSON-filnedlasting
+api.MapGet("/malgrupper/{id:int}/eksport.json", async (int id, HttpContext http, TargetGroupService svc) =>
 {
+    var virksomhetId = (int)http.Items["VirksomhetId"]!;
+    if (await svc.GetAsync(id, virksomhetId) is null)
+        return Results.Problem(title: "Målgruppe ikke funnet", statusCode: 404,
+            detail: $"Målgruppe {id} finnes ikke.",
+            type: "https://kontaktlisteregisteret.no/problems/ikke-funnet");
     try
     {
         var bytes = await svc.ExportJsonAsync(id);
@@ -287,9 +324,14 @@ api.MapGet("/malgrupper/{id:int}/eksport.json", async (int id, TargetGroupServic
     }
 });
 
-// GET /api/v1/malgrupper/{id}/eksport.csv — CSV-filnedlasting
-api.MapGet("/malgrupper/{id:int}/eksport.csv", async (int id, TargetGroupService svc) =>
+// GET /api/v1/virksomheter/{orgnr}/malgrupper/{id}/eksport.csv — CSV-filnedlasting
+api.MapGet("/malgrupper/{id:int}/eksport.csv", async (int id, HttpContext http, TargetGroupService svc) =>
 {
+    var virksomhetId = (int)http.Items["VirksomhetId"]!;
+    if (await svc.GetAsync(id, virksomhetId) is null)
+        return Results.Problem(title: "Målgruppe ikke funnet", statusCode: 404,
+            detail: $"Målgruppe {id} finnes ikke.",
+            type: "https://kontaktlisteregisteret.no/problems/ikke-funnet");
     try
     {
         var bytes = await svc.ExportCsvAsync(id);
@@ -303,11 +345,14 @@ api.MapGet("/malgrupper/{id:int}/eksport.csv", async (int id, TargetGroupService
     }
 });
 
-// POST /api/v1/malgrupper — opprett statisk eller dynamisk målgruppe
+// POST /api/v1/virksomheter/{orgnr}/malgrupper — opprett statisk eller dynamisk målgruppe
 // For Statisk: validerer orgnr mot Brreg og legger til de som finnes (Ok).
 // For Dynamisk: kjører umiddelbart SyncDynamicGroupAsync — kan ta 10–30 s.
-api.MapPost("/malgrupper", async (OpprettMålgruppeRequest req, TargetGroupService svc, IBrregService brreg) =>
+api.MapPost("/malgrupper", async (HttpContext http, OpprettMålgruppeRequest req, TargetGroupService svc, IBrregService brreg) =>
 {
+    var virksomhetId = (int)http.Items["VirksomhetId"]!;
+    var routeOrgnr = http.Request.RouteValues["orgnr"]?.ToString();
+
     if (string.IsNullOrWhiteSpace(req.Navn))
         return Results.ValidationProblem(
             new Dictionary<string, string[]> { { "navn", ["Navn er påkrevd."] } },
@@ -347,7 +392,7 @@ api.MapPost("/malgrupper", async (OpprettMålgruppeRequest req, TargetGroupServi
                 .Select(v => TargetGroupService.BrregEnhetToRecipient(v.Enhet!))
                 .ToList();
 
-            gruppe = await svc.CreateStaticAsync(req.Navn.Trim(), scope.Value, recipients);
+            gruppe = await svc.CreateStaticAsync(req.Navn.Trim(), scope.Value, recipients, virksomhetId);
             break;
         }
         case "Dynamisk":
@@ -355,7 +400,7 @@ api.MapPost("/malgrupper", async (OpprettMålgruppeRequest req, TargetGroupServi
             var criteria = (req.Kriterier
                 ?? new DynamicCriteriaDto(null, null, null, null, null, null, null))
                 .TilIntern();
-            gruppe = await svc.CreateDynamicAsync(req.Navn.Trim(), scope.Value, criteria);
+            gruppe = await svc.CreateDynamicAsync(req.Navn.Trim(), scope.Value, criteria, virksomhetId);
             break;
         }
         default:
@@ -368,13 +413,14 @@ api.MapPost("/malgrupper", async (OpprettMålgruppeRequest req, TargetGroupServi
     }
 
     var nyGruppe = await svc.GetAsync(gruppe.Id);
-    return Results.Created($"/api/v1/malgrupper/{gruppe.Id}", MålgruppeShape(nyGruppe!));
+    return Results.Created($"/api/v1/virksomheter/{routeOrgnr}/malgrupper/{gruppe.Id}", MålgruppeShape(nyGruppe!));
 });
 
-// PATCH /api/v1/malgrupper/{id} — endre navn
-api.MapPatch("/malgrupper/{id:int}", async (int id, NavnEndreRequest req, TargetGroupService svc, AppDbContext db) =>
+// PATCH /api/v1/virksomheter/{orgnr}/malgrupper/{id} — endre navn
+api.MapPatch("/malgrupper/{id:int}", async (int id, HttpContext http, NavnEndreRequest req, TargetGroupService svc, AppDbContext db) =>
 {
-    if (!await db.TargetGroups.AnyAsync(g => g.Id == id))
+    var virksomhetId = (int)http.Items["VirksomhetId"]!;
+    if (!await db.TargetGroups.AnyAsync(g => g.Id == id && g.VirksomhetId == virksomhetId))
         return Results.Problem(title: "Målgruppe ikke funnet", statusCode: 404,
             detail: $"Målgruppe {id} finnes ikke.",
             type: "https://kontaktlisteregisteret.no/problems/ikke-funnet");
@@ -388,11 +434,12 @@ api.MapPatch("/malgrupper/{id:int}", async (int id, NavnEndreRequest req, Target
     return Results.NoContent();
 });
 
-// PUT /api/v1/malgrupper/{id}/kriterier — oppdater filterregler og resynkroniser mot Brreg
+// PUT /api/v1/virksomheter/{orgnr}/malgrupper/{id}/kriterier — oppdater filterregler og resynkroniser mot Brreg
 // OBS: Kallet kan ta 10–30 s — SyncDynamicGroupAsync henter alle sider fra Brreg sekvensiell.
-api.MapPut("/malgrupper/{id:int}/kriterier", async (int id, DynamicCriteriaDto dto, TargetGroupService svc) =>
+api.MapPut("/malgrupper/{id:int}/kriterier", async (int id, HttpContext http, DynamicCriteriaDto dto, TargetGroupService svc) =>
 {
-    var g = await svc.GetAsync(id);
+    var virksomhetId = (int)http.Items["VirksomhetId"]!;
+    var g = await svc.GetAsync(id, virksomhetId);
     if (g is null)
         return Results.Problem(title: "Målgruppe ikke funnet", statusCode: 404,
             detail: $"Målgruppe {id} finnes ikke.",
@@ -407,16 +454,17 @@ api.MapPut("/malgrupper/{id:int}/kriterier", async (int id, DynamicCriteriaDto d
     await svc.SaveCriteriaAsync(g);
     await svc.SyncDynamicGroupAsync(g);
 
-    var oppdatert = await svc.GetAsync(id);
+    var oppdatert = await svc.GetAsync(id, virksomhetId);
     return Results.Ok(new { antallMedlemmer = oppdatert!.Members.Count });
 });
 
-// DELETE /api/v1/malgrupper/{id}
+// DELETE /api/v1/virksomheter/{orgnr}/malgrupper/{id}
 // Blokkeres med 409 hvis målgruppen er koblet til en låst adresseliste —
 // snapshotet er immutabelt, men sletting ville gitt inkonsistente oppslag.
-api.MapDelete("/malgrupper/{id:int}", async (int id, AppDbContext db) =>
+api.MapDelete("/malgrupper/{id:int}", async (int id, HttpContext http, AppDbContext db) =>
 {
-    var g = await db.TargetGroups.FindAsync(id);
+    var virksomhetId = (int)http.Items["VirksomhetId"]!;
+    var g = await db.TargetGroups.FirstOrDefaultAsync(x => x.Id == id && x.VirksomhetId == virksomhetId);
     if (g is null)
         return Results.Problem(title: "Målgruppe ikke funnet", statusCode: 404,
             detail: $"Målgruppe {id} finnes ikke.",

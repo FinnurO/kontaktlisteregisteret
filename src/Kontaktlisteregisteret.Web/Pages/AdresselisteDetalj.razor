@@ -574,7 +574,9 @@ else
 
     async Task LoadAsync()
     {
-        liste = await Svc.GetAsync(Id);
+        liste = Ctx.Current is not null
+            ? await Svc.GetAsync(Id, Ctx.Current.Id)
+            : await Svc.GetAsync(Id);
         if (liste is not null)
         {
             ekskluderte = AdresselisteService.GetEkskluderte(liste);

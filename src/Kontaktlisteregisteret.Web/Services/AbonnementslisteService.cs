@@ -27,6 +27,11 @@ public class AbonnementslisteService(AppDbContext db)
             .Include(l => l.Abonnenter)
             .FirstOrDefaultAsync(l => l.Id == id);
 
+    public Task<Abonnementsliste?> GetAsync(int id, int virksomhetId) =>
+        db.Abonnementslister
+            .Include(l => l.Abonnenter)
+            .FirstOrDefaultAsync(l => l.Id == id && l.VirksomhetId == virksomhetId);
+
     public async Task<Abonnementsliste> OpprettAsync(
         string navn, string? beskrivelse, string? opprettetAv = null, int? virksomhetId = null)
     {

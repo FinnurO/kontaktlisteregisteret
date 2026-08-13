@@ -513,6 +513,11 @@ else
     bool redigererNavn;
     string editNavn = "";
 
+    Task<TargetGroup?> HentGruppeAsync() =>
+        Ctx.Current is not null
+            ? Svc.GetAsync(Id, Ctx.Current.Id)
+            : Svc.GetAsync(Id);
+
     void StartRedigerNavn() { editNavn = group!.Name; redigererNavn = true; }
     void AvbrytNavn() => redigererNavn = false;
     async Task LagreNavnAsync()
@@ -520,7 +525,7 @@ else
         if (string.IsNullOrWhiteSpace(editNavn)) return;
         await Svc.UpdateNameAsync(Id, editNavn);
         redigererNavn = false;
-        group = await Svc.GetAsync(Id);
+        group = await HentGruppeAsync();
     }
 
     // Statisk gruppe — legg til
@@ -565,14 +570,14 @@ else
     async Task LagreVisningsnavnAsync(int tgmId)
     {
         await Svc.SetVisningsnavnAsync(tgmId, editVisningsnavn, editCoAdresse);
-        group = await Svc.GetAsync(Id);
+        group = await HentGruppeAsync();
         AvbrytRedigeringVisningsnavn();
     }
 
     async Task NullstillVisningsnavnAsync(int tgmId)
     {
         await Svc.SetVisningsnavnAsync(tgmId, null, null);
-        group = await Svc.GetAsync(Id);
+        group = await HentGruppeAsync();
         AvbrytRedigeringVisningsnavn();
     }
 
@@ -623,7 +628,7 @@ else
     protected override async Task OnParametersSetAsync()
     {
         await Ctx.LoadAsync(Orgnr);
-        group = await Svc.GetAsync(Id);
+        group = await HentGruppeAsync();
         if (group is not null)
         {
             criteria = Svc.GetCriteria(group) ?? new DynamicCriteria();
@@ -669,7 +674,7 @@ else
         if (group is null) return;
         var recipient = TargetGroupService.BrregEnhetToRecipient(e);
         await Svc.AddMembersAsync(group.Id, [recipient]);
-        group = await Svc.GetAsync(Id);
+        group = await HentGruppeAsync();
         addResults = addResults.Where(r => r.organisasjonsnummer != e.organisasjonsnummer).ToList();
     }
 
@@ -677,7 +682,7 @@ else
     {
         if (group is null) return;
         await Svc.RemoveMemberAsync(memberId);
-        group = await Svc.GetAsync(Id);
+        group = await HentGruppeAsync();
         ResetPage();
     }
 
@@ -714,7 +719,7 @@ else
     {
         if (group is null || coEnhet is null || string.IsNullOrWhiteSpace(coVisningsnavn)) return;
         await Svc.AddMedVisningsnavnAsync(group.Id, coEnhet, coVisningsnavn, coAdresseInput);
-        group = await Svc.GetAsync(Id);
+        group = await HentGruppeAsync();
         coEnhet = null;
         coVisningsnavn = "";
         coAdresseInput = "";
@@ -757,7 +762,7 @@ else
         var before = group!.Members.Count;
         await Svc.SyncDynamicGroupAsync(group!);
         syncError = Brreg.LastError;
-        group = await Svc.GetAsync(Id);
+        group = await HentGruppeAsync();
         var after = group!.Members.Count;
         syncMessage = syncError is null
             ? $"Sist synkronisert: {DateTime.Now:HH:mm} — {after} mottakere ({(after - before >= 0 ? "+" : "")}{after - before})"
@@ -772,7 +777,7 @@ else
         editingCriteria = false;
         await PersistCriteriaAsync();
         await Svc.SyncDynamicGroupAsync(group!);
-        group = await Svc.GetAsync(Id);
+        group = await HentGruppeAsync();
         criteria = Svc.GetCriteria(group!);
         syncMessage = $"Lagret og synkronisert: {DateTime.Now:HH:mm} — {group!.Members.Count} mottakere";
         syncing = false;
