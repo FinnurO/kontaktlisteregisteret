@@ -1,10 +1,14 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace Kontaktlisteregisteret.Web.Services;
 
-public class BrregService(HttpClient http, ILogger<BrregService> logger) : IBrregService
+public class BrregService(HttpClient http, ILogger<BrregService> logger, IMemoryCache cache) : IBrregService
 {
+    private static readonly MemoryCacheEntryOptions CacheOpts =
+        new() { AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(60) };
+
     private const string BaseUrl = "https://data.brreg.no/enhetsregisteret/api";
 
     private static readonly JsonSerializerOptions JsonOpts = new()
@@ -97,13 +101,25 @@ public class BrregService(HttpClient http, ILogger<BrregService> logger) : IBrre
         LastError = null;
         var clean = orgnr.Replace(" ", "");
 
+        var cacheKey = $"brreg:orgnr:{clean}";
+        if (cache.TryGetValue(cacheKey, out BrregEnhet? cached))
+            return cached;
+
         // Prøv hovedenhet først
         var (enhet, enheterError) = await FetchAsync<BrregEnhet>($"{BaseUrl}/enheter/{clean}");
-        if (enhet is not null) return enhet;
+        if (enhet is not null)
+        {
+            cache.Set(cacheKey, enhet, CacheOpts);
+            return enhet;
+        }
 
         // Hvis ikke funnet som enhet, prøv underenhet (driftsenhet/avdeling)
         var (under, underError) = await FetchAsync<BrregEnhet>($"{BaseUrl}/underenheter/{clean}");
-        if (under is not null) return under;
+        if (under is not null)
+        {
+            cache.Set(cacheKey, under, CacheOpts);
+            return under;
+        }
 
         // Begge feilet — vis en brukervennlig melding uten interne URL-detaljer
         LastError = "Fant ikke organisasjonen i Enhetsregisteret.";
@@ -114,6 +130,11 @@ public class BrregService(HttpClient http, ILogger<BrregService> logger) : IBrre
     public async Task<List<BrregEnhet>> GetChildrenAsync(string orgnr)
     {
         LastError = null;
+
+        var cacheKey = $"brreg:hierarki:{orgnr}";
+        if (cache.TryGetValue(cacheKey, out List<BrregEnhet>? cachedChildren))
+            return cachedChildren!;
+
         var all = new List<BrregEnhet>();
 
         // Enheter (overordnet enhet er registrert som mor)
@@ -127,7 +148,9 @@ public class BrregService(HttpClient http, ILogger<BrregService> logger) : IBrre
         if (underResult?.Embedded?.underenheter is { } u) all.AddRange(u);
         if (error is not null) LastError = error;
 
-        return all.DistinctBy(x => x.organisasjonsnummer).ToList();
+        var result = all.DistinctBy(x => x.organisasjonsnummer).ToList();
+        cache.Set(cacheKey, result, CacheOpts);
+        return result;
     }
 
     public async Task<List<OrgnrValidationResult>> ValidateOrgnrListAsync(IEnumerable<string> orgnrs)
