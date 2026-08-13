@@ -56,7 +56,7 @@ PoC med kjernefunksjonalitet for målgrupper, adresselister og abonnementslister
 | T-06 | `SeedAsync` (~300 linjer hardkodet data) ligger i `Program.cs` — flytt til `Data/SeedData.cs` |
 | T-07 | API-endepunkter (~140 linjer) ligger i `Program.cs` — flytt til egen `ApiEndpoints`-klasse med extension-metode på `IEndpointRouteBuilder` |
 | T-08 | Ingen OpenAPI/Swagger — legg til `Microsoft.AspNetCore.OpenApi` (innebygd i .NET 10) for maskinlesbar API-spec og enklere klientgenerering hos konsumenter. **Forutsetning for B-21** (TypeScript-klientgenerering til React-frontend). |
-| T-09 | CI for kvalitetssikring — legg til GitHub Actions som kjører `dotnet test`, NuGet-sårbarhetssjekk og Playwright e2e-testene. Utsatt mens løsningen kun kjøres lokalt. |
+| T-09 | Ingen CI — legg til GitHub Actions som kjører `dotnet test`, NuGet-sårbarhetssjekk og Playwright e2e-testene. Utsatt mens løsningen kun kjøres lokalt. |
 
 ---
 
